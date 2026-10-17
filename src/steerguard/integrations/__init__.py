@@ -1,0 +1,1 @@
+"""Framework integrations (optional dependencies)."""

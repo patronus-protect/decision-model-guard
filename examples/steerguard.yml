@@ -1,0 +1,21 @@
+# steerguard serve --config examples/steerguard.yml
+model:
+  type: wolf_defender_jev
+scanners:
+  - type: InvisibleText
+  - type: ForgedTrustBlock
+  - type: VerdictTokens
+  - type: PromptInjection
+  - type: ClaimDetector
+gate:
+  selector: detector
+  scope: unordered
+guards:
+  - type: Confidence
+    min_confidence: 0.55
+policy:
+  unstable_action: fallback
+audit:
+  path: logs/decisions.jsonl
+server:
+  auth_token_env: STEERGUARD_TOKEN
