@@ -11,6 +11,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e ".[server,http,langchain]" pytest ruff
-      - run: ruff check src tests
+      - run: pip install -e ".[server,http,langchain,onnx]" onnx pytest ruff
+      - run: ruff check src tests examples
       - run: pytest -q

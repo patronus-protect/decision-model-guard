@@ -35,6 +35,12 @@ pip install "decision-model-guard[server]"      # HTTP API
 pip install "decision-model-guard[all]"         # everything
 ```
 
+Until the first PyPI release, install from GitHub:
+
+```bash
+pip install "decision-model-guard[onnx] @ git+https://github.com/patronus-protect/decision-model-guard"
+```
+
 From a checkout: `pip install -e ".[dev]"`. Python 3.10 or newer.
 
 ## Quickstart
