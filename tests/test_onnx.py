@@ -57,7 +57,7 @@ def _classifier(path, token_id):
                                                     helper.make_tensor_value_info("attention_mask", TensorProto.INT64, ["b", "l"])],
                               [helper.make_tensor_value_info("logits", TensorProto.FLOAT, ["b", 2])], inits)
     path.parent.mkdir(parents=True, exist_ok=True)
-    onnx.save(helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)]), str(path))
+    onnx.save(helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)], ir_version=8), str(path))
 
 
 def _jev_graph(path, scene_token, yes_token):
@@ -76,7 +76,7 @@ def _jev_graph(path, scene_token, yes_token):
             ("option_input_ids", ["k", "m"]), ("option_attention_mask", ["k", "m"]))]
     graph = helper.make_graph(nodes, "jev", ins, [helper.make_tensor_value_info("logits", TensorProto.FLOAT, ["b", "k"])], inits)
     path.parent.mkdir(parents=True, exist_ok=True)
-    onnx.save(helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)]), str(path))
+    onnx.save(helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)], ir_version=8), str(path))
 
 
 @pytest.fixture(autouse=True)
