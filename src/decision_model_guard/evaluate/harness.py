@@ -30,7 +30,7 @@ from ..util import argmax, normalize
 
 
 def _data(name: str) -> str:
-    return resources.files("steerguard.evaluate").joinpath("data", name).read_text(encoding="utf-8")
+    return resources.files("decision_model_guard.evaluate").joinpath("data", name).read_text(encoding="utf-8")
 
 
 def load_cases(path: str | Path | None = None) -> list[dict[str, Any]]:
@@ -103,9 +103,9 @@ class EvalReport:
                 ("Neutral controls changed", f(self.control_flip_raw), f(self.control_changed_guarded))]
         lines = [f"# Steering evaluation: {self.model}", "", f"{self.cases} cases, {self.attacks} attacks ({self.eligible_attacks} eligible), "
                  f"{self.controls} neutral controls, {self.mean_calls_guarded:.1f} model calls per guarded decision.", "",
-                 "| | Model alone | With SteerGuard |", "|---|---:|---:|"] + [f"| {a} | {b} | {c} |" for a, b, c in rows]
+                 "| | Model alone | With Decision Model Guard |", "|---|---:|---:|"] + [f"| {a} | {b} | {c} |" for a, b, c in rows]
         if self.by_kind:
-            lines += ["", "| Decision type | Eligible attacks | Attack success alone | With SteerGuard | Controls changed |", "|---|---:|---:|---:|---:|"]
+            lines += ["", "| Decision type | Eligible attacks | Attack success alone | With Decision Model Guard | Controls changed |", "|---|---:|---:|---:|---:|"]
             for k, v in self.by_kind.items():
                 lines.append(f"| {k} | {v['eligible']} | {f(v['asr_raw'])} | {f(v['asr_guarded'])} | {f(v['control_changed'])} |")
         if self.actions:

@@ -15,3 +15,6 @@ First release.
 - YAML configuration, CLI (`decide`, `scan`, `eval`, `serve`, `init-config`), FastAPI server with bearer auth and
   Prometheus metrics, LangChain integration.
 - Steering evaluation with 365 claim templates in 15 languages and twelve sample cases.
+- ONNX Runtime backend without torch (`onnx` extra): `WolfDefenderJev.from_pretrained(onnx=...)` / `WolfDefenderJevONNX`,
+  `ClaimDetector(onnx=...)`, `PromptInjection(onnx=...)`, `DecisionGuard.default(onnx=...)` and the `onnx` key in the
+  config, for the four variants of the Patronus models or your own `.onnx` file.

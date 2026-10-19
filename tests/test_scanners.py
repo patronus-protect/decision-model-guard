@@ -1,5 +1,5 @@
-from steerguard import scan_content
-from steerguard.input_scanners import BanSubstrings, ForgedTrustBlock, InvisibleText, Regex, TokenLimit, VerdictTokens
+from decision_model_guard import scan_content
+from decision_model_guard.input_scanners import BanSubstrings, ForgedTrustBlock, InvisibleText, Regex, TokenLimit, VerdictTokens
 
 
 def test_invisible_text_detects_and_removes():

@@ -1,6 +1,6 @@
 """Any Jev-like endpoint with named questions (for example a local kev.serve server)."""
-from steerguard import DecisionGuard
-from steerguard.models import SystemOneHTTP
+from decision_model_guard import DecisionGuard
+from decision_model_guard.models import SystemOneHTTP
 
 model = SystemOneHTTP("http://127.0.0.1:8008/v1/systemone", model="kev", api_key_env="KEV_TOKEN")
 guard = DecisionGuard.default(model)

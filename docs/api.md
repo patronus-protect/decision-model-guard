@@ -1,8 +1,8 @@
 # API server
 
 ```bash
-pip install "steerguard[server,hf]"
-steerguard serve --config steerguard.yml --host 0.0.0.0 --port 8000
+pip install "decision-model-guard[server,hf]"
+dmguard serve --config dmguard.yml --host 0.0.0.0 --port 8000
 ```
 
 The guard is built on the first request (`GET /readyz` builds it eagerly).
@@ -20,9 +20,9 @@ Server settings in the config:
 
 ```yaml
 server:
-  auth_token_env: STEERGUARD_TOKEN    # require "Authorization: Bearer <token>" when the variable is set
+  auth_token_env: DMGUARD_TOKEN    # require "Authorization: Bearer <token>" when the variable is set
   max_body_bytes: 2000000
 ```
 
 Invalid requests (fewer than two options, option index out of range) return 422. In Python:
-`steerguard.server.create_app(guard=..., config=..., auth_token=...)` returns the FastAPI app for your own ASGI server.
+`decision_model_guard.server.create_app(guard=..., config=..., auth_token=...)` returns the FastAPI app for your own ASGI server.

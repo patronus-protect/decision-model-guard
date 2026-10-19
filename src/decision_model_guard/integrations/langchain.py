@@ -17,7 +17,7 @@ def as_runnable(guard: DecisionGuard, include_scene: bool = False):
                          fallback=inp.get("fallback"), meta=inp.get("meta"))
         return d.to_dict(include_scene=include_scene)
 
-    return core.RunnableLambda(_run, name="SteerGuard")
+    return core.RunnableLambda(_run, name="Decision Model Guard")
 
 
 def decision_tool(guard: DecisionGuard, question: str, options: list[str], name: str = "guarded_decision", **decide_kw):

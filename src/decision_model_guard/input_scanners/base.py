@@ -36,5 +36,8 @@ def load_classifier(model_id: str, device: str | None = None, subfolder: str | N
 
 
 def clear_model_cache() -> None:
+    """Drop the cached transformer models and ONNX Runtime sessions."""
     with _LOCK:
         _MODELS.clear()
+    from .._onnx import clear_sessions
+    clear_sessions()

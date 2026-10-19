@@ -1,6 +1,6 @@
 """The recommended pipeline around Wolf Defender Jev (downloads the model and the claim detector once)."""
-from steerguard import DecisionGuard, Scene
-from steerguard.models import WolfDefenderJev
+from decision_model_guard import DecisionGuard, Scene
+from decision_model_guard.models import WolfDefenderJev
 
 guard = DecisionGuard.default(WolfDefenderJev.from_pretrained())
 

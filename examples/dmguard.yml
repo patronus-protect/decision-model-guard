@@ -1,4 +1,4 @@
-# steerguard serve --config examples/steerguard.yml
+# dmguard serve --config examples/dmguard.yml
 model:
   type: wolf_defender_jev
 scanners:
@@ -18,4 +18,4 @@ policy:
 audit:
   path: logs/decisions.jsonl
 server:
-  auth_token_env: STEERGUARD_TOKEN
+  auth_token_env: DMGUARD_TOKEN

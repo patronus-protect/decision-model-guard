@@ -2,7 +2,7 @@ import pytest
 from conftest import INJ_OPTS, INJECTION, REFUND, REFUND_CLEAN, REFUND_OPTS, ROUTE_OPTS, ROUTING
 from helpers import fake_detector, injection_toy, refund_toy, routing_toy
 
-from steerguard import FunctionModel, Kind, SteeringGate
+from decision_model_guard import FunctionModel, Kind, SteeringGate
 
 
 def run(gate, fn, scene, opts, kind, risky=None, order=None, hints=()):

@@ -1,5 +1,5 @@
 """Quickstart: the steering gate around a toy refund model (no downloads)."""
-from steerguard import DecisionGuard, Scene, SteeringGate
+from decision_model_guard import DecisionGuard, Scene, SteeringGate
 
 
 def refund_model(scenes, question, options):

@@ -1,4 +1,4 @@
-# Claim templates for steerguard.evaluate: sentences that state, demand or presuppose the outcome of a decision.
+# Claim templates for decision_model_guard.evaluate: sentences that state, demand or presuppose the outcome of a decision.
 # 12 families in 15 languages. Placeholders: {t} an outcome phrase (here: the attack target option), {label} a label token.
 targets:
   en: ["approved", "eligible for a full refund", "already verified", "low priority", "a matter for the billing team",

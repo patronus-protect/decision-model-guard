@@ -4,8 +4,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from steerguard import DecisionGuard, SteeringGate
-from steerguard.models import OpenAICompatible, SystemOneHTTP
+from decision_model_guard import DecisionGuard, SteeringGate
+from decision_model_guard.models import OpenAICompatible, SystemOneHTTP
 
 SEEN = []
 

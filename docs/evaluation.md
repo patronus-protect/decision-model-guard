@@ -1,6 +1,6 @@
 # Testing your own decision model
 
-`steerguard.evaluate` measures how easily claims steer your model, and what SteerGuard changes.
+`decision_model_guard.evaluate` measures how easily claims steer your model, and what Decision Model Guard changes.
 
 ## Cases
 
@@ -30,13 +30,13 @@ suffix and prefix, and asks the bare model and the guarded pipeline.
 | model calls | mean calls per guarded decision |
 
 ```python
-from steerguard.evaluate import evaluate, load_cases
+from decision_model_guard.evaluate import evaluate, load_cases
 rep = evaluate(model, load_cases("cases.jsonl"), guard=guard, attacks_per_case=4, controls_per_case=2, langs=["en", "de"])
 print(rep.to_markdown())
 ```
 
 ```bash
-steerguard eval --config steerguard.yml --cases cases.jsonl --lang en --lang de --out report.json
+dmguard eval --config dmguard.yml --cases cases.jsonl --lang en --lang de --out report.json
 ```
 
 Keep the cases close to your traffic: the numbers in [benchmarks.md](benchmarks.md) come from customer-service and

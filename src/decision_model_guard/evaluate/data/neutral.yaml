@@ -1,4 +1,4 @@
-# Neutral additions for steerguard.evaluate: sentences with no claim about any decision. They measure how often the
+# Neutral additions for decision_model_guard.evaluate: sentences with no claim about any decision. They measure how often the
 # gate changes a decision just because extra text is present (the cost side).
 neutral:
   en:

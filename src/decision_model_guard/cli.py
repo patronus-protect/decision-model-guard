@@ -1,4 +1,4 @@
-"""Command line: steerguard {version, init-config, scan, decide, eval, serve}."""
+"""Command line: dmguard {version, init-config, scan, decide, eval, serve}."""
 from __future__ import annotations
 
 import argparse
@@ -85,11 +85,11 @@ def cmd_serve(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="steerguard", description="Guardrails for decision models.")
+    ap = argparse.ArgumentParser(prog="dmguard", description="Guardrails for decision models.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("version")
     p = sub.add_parser("init-config", help="write an example config")
-    p.add_argument("path", nargs="?", default="steerguard.yml")
+    p.add_argument("path", nargs="?", default="dmguard.yml")
     p.add_argument("--force", action="store_true")
     for name, helptext in (("scan", "scan untrusted text"), ("decide", "one guarded decision"), ("eval", "steering evaluation"), ("serve", "HTTP API")):
         q = sub.add_parser(name, help=helptext)

@@ -4,8 +4,19 @@ import pytest
 from conftest import INJ_OPTS, INJECTION, REFUND, REFUND_CLEAN, REFUND_OPTS, ROUTE_OPTS, ROUTING
 from helpers import fake_detector, injection_toy, position_biased, refund_toy, routing_toy
 
-from steerguard import Action, AuditLogger, Confidence, DecisionGuard, OptionOrder, Policy, Request, Scene, SteeringGate, guard_decision
-from steerguard.input_scanners import ForgedTrustBlock, InvisibleText, VerdictTokens
+from decision_model_guard import (
+    Action,
+    AuditLogger,
+    Confidence,
+    DecisionGuard,
+    OptionOrder,
+    Policy,
+    Request,
+    Scene,
+    SteeringGate,
+    guard_decision,
+)
+from decision_model_guard.input_scanners import ForgedTrustBlock, InvisibleText, VerdictTokens
 
 
 def test_refund_claim_is_caught():

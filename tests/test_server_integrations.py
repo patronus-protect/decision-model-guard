@@ -1,13 +1,13 @@
 import pytest
 from conftest import REFUND, REFUND_OPTS
 
-from steerguard import DecisionGuard, SteeringGate
-from steerguard.input_scanners import VerdictTokens
+from decision_model_guard import DecisionGuard, SteeringGate
+from decision_model_guard.input_scanners import VerdictTokens
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
-from steerguard.server import create_app  # noqa: E402
+from decision_model_guard.server import create_app  # noqa: E402
 
 
 def guard():
@@ -27,7 +27,7 @@ def test_endpoints():
     assert c.post("/v1/decide", json={"scene": REFUND, "question": "q", "options": ["one"]}).status_code == 422
     assert c.post("/v1/decide", json={"scene": REFUND, "question": "q", "options": REFUND_OPTS, "order": [9]}).status_code == 422
     m = c.get("/metrics").text
-    assert 'steerguard_decisions_total{action="cautious"}' in m
+    assert 'dmguard_decisions_total{action="cautious"}' in m
 
 
 def test_auth_token():
@@ -40,7 +40,7 @@ def test_auth_token():
 
 def test_langchain_runnable_and_tool():
     pytest.importorskip("langchain_core")
-    from steerguard.integrations.langchain import as_runnable, decision_tool
+    from decision_model_guard.integrations.langchain import as_runnable, decision_tool
     out = as_runnable(guard()).invoke({"scene": REFUND, "question": "How?", "options": REFUND_OPTS, "order": [0, 1, 2]})
     assert out["action"] == "cautious"
     tool = decision_tool(guard(), "How should this refund be handled?", REFUND_OPTS, order=[0, 1, 2])

@@ -4,7 +4,7 @@ install:
 test:
 	pytest -q
 test-slow:
-	STEERGUARD_SLOW=1 pytest -q
+	DMGUARD_SLOW=1 pytest -q
 lint:
 	ruff check src tests
 build:

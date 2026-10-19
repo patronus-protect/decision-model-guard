@@ -3,7 +3,7 @@ requires = ["hatchling>=1.21"]
 build-backend = "hatchling.build"
 
 [project]
-name = "steerguard"
+name = "decision-model-guard"
 dynamic = ["version"]
 description = "Guardrails for decision models: stop text inside the content from steering classifiers, Jev-like models and LLM judges."
 readme = "README.md"
@@ -11,7 +11,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [{ name = "Patronus Protect" }]
-keywords = ["ai-security", "prompt-injection", "decision-steering", "guardrails", "llm-judge", "jev-like", "decision-model"]
+keywords = ["ai-security", "prompt-injection", "decision-steering", "guardrails", "llm-judge", "jev-like", "decision-model", "onnx"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
@@ -32,28 +32,29 @@ hf = ["torch>=2.1", "transformers>=4.48", "huggingface_hub>=0.23", "safetensors>
 server = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.5"]
 http = ["httpx>=0.27"]
 langchain = ["langchain-core>=0.2"]
-all = ["steerguard[hf,server,http,langchain]"]
-dev = ["steerguard[all]", "pytest>=8", "ruff>=0.4", "build>=1.2"]
+onnx = ["onnxruntime>=1.20", "tokenizers>=0.19", "numpy>=1.24", "huggingface_hub>=0.23"]
+all = ["decision-model-guard[hf,onnx,server,http,langchain]"]
+dev = ["decision-model-guard[all]", "pytest>=8", "ruff>=0.4", "build>=1.2"]
 
 [project.scripts]
-steerguard = "steerguard.cli:main"
+dmguard = "decision_model_guard.cli:main"
 
 [project.urls]
 Homepage = "https://patronus.studio"
 Documentation = "https://huggingface.co/patronus-studio/decision-steering-gate"
 
 [tool.hatch.version]
-path = "src/steerguard/version.py"
+path = "src/decision_model_guard/version.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/steerguard"]
+packages = ["src/decision_model_guard"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/steerguard", "tests", "docs", "examples", "README.md", "LICENSE", "CHANGELOG.md"]
+include = ["src/decision_model_guard", "tests", "docs", "examples", "README.md", "LICENSE", "CHANGELOG.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["slow: downloads and runs real models (set STEERGUARD_SLOW=1)"]
+markers = ["slow: downloads and runs real models (set DMGUARD_SLOW=1)"]
 
 [tool.ruff]
 line-length = 140

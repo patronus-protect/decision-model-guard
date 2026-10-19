@@ -8,7 +8,7 @@ import os
 import uuid
 from typing import Any
 
-log = logging.getLogger("steerguard")
+log = logging.getLogger("decision_model_guard")
 
 
 def require(module: str, extra: str) -> Any:
@@ -16,14 +16,14 @@ def require(module: str, extra: str) -> Any:
     try:
         return importlib.import_module(module)
     except ImportError as e:  # pragma: no cover - depends on the environment
-        raise ImportError(f"'{module}' is required for this feature: pip install 'steerguard[{extra}]'") from e
+        raise ImportError(f"'{module}' is required for this feature: pip install 'decision-model-guard[{extra}]'") from e
 
 
 def pick_device(device: str | None = None) -> str:
-    """'cpu', 'cuda' or 'mps'. Default: STEERGUARD_DEVICE, else cuda if available, else cpu (MPS only on request)."""
+    """'cpu', 'cuda' or 'mps'. Default: DMGUARD_DEVICE, else cuda if available, else cpu (MPS only on request)."""
     if device:
         return device
-    env = os.environ.get("STEERGUARD_DEVICE")
+    env = os.environ.get("DMGUARD_DEVICE")
     if env:
         return env
     try:

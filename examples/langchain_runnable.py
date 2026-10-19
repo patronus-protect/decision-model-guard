@@ -1,6 +1,6 @@
-"""SteerGuard as a LangChain Runnable."""
-from steerguard import DecisionGuard, SteeringGate
-from steerguard.integrations.langchain import as_runnable
+"""Decision Model Guard as a LangChain Runnable."""
+from decision_model_guard import DecisionGuard, SteeringGate
+from decision_model_guard.integrations.langchain import as_runnable
 
 
 def refund_model(scenes, question, options):

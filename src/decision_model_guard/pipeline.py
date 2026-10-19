@@ -66,11 +66,14 @@ class DecisionGuard:
         self.trusted = tuple(trusted_headers)
 
     @classmethod
-    def default(cls, model: DecisionModel | DecideBatch, device: str | None = None, detector_threshold: float = 0.3, **kw) -> DecisionGuard:
+    def default(cls, model: DecisionModel | DecideBatch, device: str | None = None, detector_threshold: float = 0.3,
+                onnx: str | None = None, **kw) -> DecisionGuard:
         """Recommended setup: rule-based scanners, claim detector, full check for risky and ordered decisions, detector-led
-        check for unordered ones (where the full check falls back too often)."""
+        check for unordered ones (where the full check falls back too often). `onnx` runs the claim detector on ONNX
+        Runtime ("int8_int4_embeddings" is the 96 MB variant); combine it with WolfDefenderJev.from_pretrained(onnx=...)
+        for a setup without torch."""
         from .input_scanners import ClaimDetector, ForgedTrustBlock, InvisibleText, VerdictTokens
-        det = ClaimDetector(threshold=detector_threshold, device=device)
+        det = ClaimDetector(threshold=detector_threshold, device=device, onnx=onnx)
         return cls(model, scanners=[InvisibleText(), ForgedTrustBlock(), VerdictTokens(), det],
                    gate=SteeringGate(selector="detector", detector=det, threshold=detector_threshold, scope="unordered"), **kw)
 

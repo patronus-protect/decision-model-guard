@@ -12,23 +12,43 @@ WOLF_DEFENDER_SMALL = "patronus-studio/wolf-defender-prompt-injection-small"
 WOLF_DEFENDER = "patronus-studio/wolf-defender-prompt-injection"
 
 
-def _positive_index(model, hint: str) -> int:
-    labels = {int(k): str(v).lower() for k, v in (model.config.id2label or {}).items()}
-    for i, v in labels.items():
-        if hint in v:
+def _positive_index(id2label: dict[int, str], hint: str) -> int:
+    for i, v in id2label.items():
+        if hint in v.lower():
             return i
     return 1
 
 
-def _probs(tok, model, texts: Sequence[str], max_length: int, batch_size: int, pos: int) -> list[float]:
-    import torch
-    out: list[float] = []
-    with torch.no_grad():
-        for i in range(0, len(texts), batch_size):
-            x = tok(list(texts[i: i + batch_size]), truncation=True, max_length=max_length, padding=True, pad_to_multiple_of=32,
-                    return_tensors="pt").to(model.device)
-            out += torch.softmax(model(**x).logits.float(), -1)[:, pos].tolist()
-    return out
+class _TorchBackend:
+    """transformers sequence classifier; shares the process-wide model cache with the steering gate."""
+
+    def __init__(self, model_id: str, device: str | None):
+        self.tok, self.model = load_classifier(model_id, device)
+        self.id2label = {int(k): str(v) for k, v in (self.model.config.id2label or {}).items()}
+
+    def ids(self, text: str) -> list[int]:
+        return self.tok.encode(text, add_special_tokens=False)
+
+    def decode(self, ids: Sequence[int]) -> str:
+        return self.tok.decode(list(ids))
+
+    def probs(self, texts: Sequence[str], max_length: int, batch_size: int, pos: int) -> list[float]:
+        import torch
+        tok, model = self.tok, self.model
+        out: list[float] = []
+        with torch.no_grad():
+            for i in range(0, len(texts), batch_size):
+                x = tok(list(texts[i: i + batch_size]), truncation=True, max_length=max_length, padding=True, pad_to_multiple_of=32,
+                        return_tensors="pt").to(model.device)
+                out += torch.softmax(model(**x).logits.float(), -1)[:, pos].tolist()
+        return out
+
+
+def _backend(model_id: str, device: str | None, onnx: str | None, threads: int | None):
+    if onnx is None:
+        return _TorchBackend(model_id, device)
+    from .._onnx import OnnxClassifier
+    return OnnxClassifier(model_id, onnx, threads=threads)
 
 
 class PromptInjection:
@@ -36,50 +56,55 @@ class PromptInjection:
 
     match: "full" scores the whole text (long texts keep head and tail), "sentences" scores every sentence and reports the
     flagged ones, "chunks" scores overlapping token windows of `chunk_tokens`. The risk score is the highest
-    injection probability. Default model: Wolf Defender Small; use WOLF_DEFENDER for the larger model."""
+    injection probability. Default model: Wolf Defender Small; use WOLF_DEFENDER for the larger model.
+
+    onnx: run an ONNX variant on ONNX Runtime instead of PyTorch ("fp32", "fp16", "mixed", "int8_int4_embeddings" or a
+    path to an .onnx file); needs the `onnx` extra, no torch."""
 
     name = "PromptInjection"
 
     def __init__(self, model: str = WOLF_DEFENDER_SMALL, threshold: float = 0.5, match: str = "full", max_length: int = 2048,
-                 chunk_tokens: int = 512, stride: int = 128, batch_size: int = 16, device: str | None = None):
+                 chunk_tokens: int = 512, stride: int = 128, batch_size: int = 16, device: str | None = None,
+                 onnx: str | None = None, threads: int | None = None):
         if match not in ("full", "sentences", "chunks"):
             raise ValueError("match must be 'full', 'sentences' or 'chunks'")
         self.model_id, self.threshold, self.match = model, threshold, match
         self.max_length, self.chunk_tokens, self.stride, self.batch_size, self.device = max_length, chunk_tokens, stride, batch_size, device
+        self.onnx, self.threads = onnx, threads
         self._loaded = None
 
     def _load(self):
         if self._loaded is None:
-            tok, model = load_classifier(self.model_id, self.device)
-            self._loaded = (tok, model, _positive_index(model, "inject"))
+            be = _backend(self.model_id, self.device, self.onnx, self.threads)
+            self._loaded = (be, _positive_index(be.id2label, "inject"))
         return self._loaded
 
-    def _keep_head_tail(self, tok, text: str) -> str:
-        ids = tok.encode(text, add_special_tokens=False)
+    def _keep_head_tail(self, be, text: str) -> str:
+        ids = be.ids(text)
         lim = self.max_length - 4
         if len(ids) <= lim:
             return text
-        return tok.decode(ids[: lim // 3]) + "\n" + tok.decode(ids[-(lim - lim // 3):])
+        return be.decode(ids[: lim // 3]) + "\n" + be.decode(ids[-(lim - lim // 3):])
 
     def scan(self, text: str) -> ScanResult:
         if not text.strip():
             return ScanResult(self.name, text, True, 0.0)
-        tok, model, pos = self._load()
+        be, pos = self._load()
         findings: list[Finding] = []
         if self.match == "full":
-            score = _probs(tok, model, [self._keep_head_tail(tok, text)], self.max_length, 1, pos)[0]
+            score = be.probs([self._keep_head_tail(be, text)], self.max_length, 1, pos)[0]
             if score >= self.threshold:
                 findings.append(Finding(self.name, score, "prompt injection"))
         elif self.match == "sentences":
             spans = sentences(text) or [(0, len(text))]
-            ps = _probs(tok, model, [text[a:b] for a, b in spans], self.max_length, self.batch_size, pos)
+            ps = be.probs([text[a:b] for a, b in spans], self.max_length, self.batch_size, pos)
             score = max(ps)
             findings = [Finding(self.name, p, "prompt injection", a, b, text[a:b]) for (a, b), p in zip(spans, ps, strict=True) if p >= self.threshold]
         else:
-            ids = tok.encode(text, add_special_tokens=False)
+            ids = be.ids(text)
             step = max(1, self.chunk_tokens - self.stride)
-            chunks = [tok.decode(ids[i: i + self.chunk_tokens]) for i in range(0, max(1, len(ids) - self.stride), step)] or [text]
-            ps = _probs(tok, model, chunks, self.max_length, self.batch_size, pos)
+            chunks = [be.decode(ids[i: i + self.chunk_tokens]) for i in range(0, max(1, len(ids) - self.stride), step)] or [text]
+            ps = be.probs(chunks, self.max_length, self.batch_size, pos)
             score = max(ps)
             findings = [Finding(self.name, p, f"prompt injection in chunk {i}") for i, p in enumerate(ps) if p >= self.threshold]
         return ScanResult(self.name, text, score < self.threshold, float(score), findings)
@@ -90,29 +115,32 @@ class ClaimDetector:
     instructions to the classifier, forged review notes. Scores every unit the steering gate would erase (paragraphs and
     windows of 1 to 3 sentences) with the claim detector of the Decision Steering Gate (mmBERT-small, 15 languages).
 
-    `redact=True` removes the flagged units from the sanitized text. The gate reuses `score()` to pick what to erase."""
+    `redact=True` removes the flagged units from the sanitized text. The gate reuses `score()` to pick what to erase.
+    onnx: run an ONNX variant on ONNX Runtime instead of PyTorch ("fp32", "fp16", "mixed", "int8_int4_embeddings" or a
+    path to an .onnx file; the smallest is 96 MB); needs the `onnx` extra, no torch."""
 
     name = "ClaimDetector"
 
     def __init__(self, model: str = CLAIM_DETECTOR, threshold: float = 0.3, redact: bool = False, window: int = 3,
-                 max_length: int = 128, batch_size: int = 64, device: str | None = None):
+                 max_length: int = 128, batch_size: int = 64, device: str | None = None, onnx: str | None = None,
+                 threads: int | None = None):
         self.model_id, self.threshold, self.redact, self.window = model, threshold, redact, window
-        self.max_length, self.batch_size, self.device = max_length, batch_size, device
+        self.max_length, self.batch_size, self.device, self.onnx, self.threads = max_length, batch_size, device, onnx, threads
         self._loaded = None
 
     def _load(self):
         if self._loaded is None:
-            tok, model = load_classifier(self.model_id, self.device)
-            self._loaded = (tok, model, _positive_index(model, "claim"))
+            be = _backend(self.model_id, self.device, self.onnx, self.threads)
+            self._loaded = (be, _positive_index(be.id2label, "claim"))
         return self._loaded
 
     def score(self, texts: Sequence[str]) -> list[float]:
         """Claim probability for each text (unit)."""
         if not texts:
             return []
-        tok, model, pos = self._load()
+        be, pos = self._load()
         order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
-        ps = _probs(tok, model, [texts[i] for i in order], self.max_length, self.batch_size, pos)
+        ps = be.probs([texts[i] for i in order], self.max_length, self.batch_size, pos)
         out = [0.0] * len(texts)
         for i, p in zip(order, ps, strict=True):
             out[i] = p

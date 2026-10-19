@@ -4,10 +4,10 @@ import pytest
 import yaml
 from conftest import REFUND, REFUND_OPTS
 
-from steerguard import Action, build_guard
-from steerguard.cli import main
-from steerguard.config import EXAMPLE_CONFIG
-from steerguard.evaluate import default_target, evaluate, insert, load_cases
+from decision_model_guard import Action, build_guard
+from decision_model_guard.cli import main
+from decision_model_guard.config import EXAMPLE_CONFIG
+from decision_model_guard.evaluate import default_target, evaluate, insert, load_cases
 
 CFG = {"model": {"type": "callable", "target": "helpers:refund_toy"},
        "scanners": [{"type": "InvisibleText"}, {"type": "VerdictTokens"}, {"type": "ForgedTrustBlock"}],
@@ -82,4 +82,4 @@ def test_evaluate_reports_gate_effect():
     rep = evaluate(refund_toy, cases, attacks_per_case=6, controls_per_case=2, seed=1)
     assert rep.attack_success_raw is not None and rep.attack_success_guarded is not None
     assert rep.attack_success_guarded <= rep.attack_success_raw
-    assert "With SteerGuard" in rep.to_markdown()
+    assert "With Decision Model Guard" in rep.to_markdown()

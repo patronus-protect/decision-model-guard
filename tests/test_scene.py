@@ -1,4 +1,4 @@
-from steerguard.scene import Scene, erase, parse_blocks, sentences, units
+from decision_model_guard.scene import Scene, erase, parse_blocks, sentences, units
 
 
 def test_trusted_and_untrusted_blocks():

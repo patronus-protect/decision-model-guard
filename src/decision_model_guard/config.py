@@ -3,6 +3,7 @@
     model:
       type: wolf_defender_jev            # wolf_defender_jev | systemone_http | openai_compatible | causal_lm | hf_classifier | callable
       device: cpu
+      # onnx: int8_int4_embeddings       # ONNX Runtime instead of PyTorch: fp32 | fp16 | mixed | int8_int4_embeddings
     scanners:
       - type: InvisibleText
       - type: ForgedTrustBlock
@@ -11,6 +12,7 @@
         threshold: 0.5
       - type: ClaimDetector
         threshold: 0.3
+        # onnx: int8_int4_embeddings     # the 96 MB ONNX variant, no torch needed
     gate:
       selector: detector                 # all | detector
       scope: unordered                   # all | unordered
@@ -108,9 +110,11 @@ def build_guard(config: dict[str, Any] | str | Path, model: DecisionModel | None
         if g.get("selector") == "detector":
             det = next((s for s in scanners if isinstance(s, S.ClaimDetector)), None)
             if det is None:
-                det = S.ClaimDetector(threshold=g.get("threshold", 0.3), **({"device": g["device"]} if "device" in g else {}))
+                extra = {k: g[k] for k in ("device", "onnx") if k in g}
+                det = S.ClaimDetector(threshold=g.get("threshold", 0.3), **extra)
             g["detector"] = det
         g.pop("device", None)
+        g.pop("onnx", None)
         gate = SteeringGate(**g)
     guards = []
     for gc in cfg.get("guards", []):

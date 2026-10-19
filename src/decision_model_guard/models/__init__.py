@@ -2,7 +2,7 @@
 from .base import DecideBatch, DecisionModel, FunctionModel, as_model
 from .http import OpenAICompatible, SystemOneHTTP
 from .local import CausalLMJudge, HFClassifier
-from .wolf_defender_jev import WolfDefenderJev
+from .wolf_defender_jev import WolfDefenderJev, WolfDefenderJevONNX
 
 __all__ = ["DecideBatch", "DecisionModel", "FunctionModel", "as_model", "SystemOneHTTP", "OpenAICompatible", "CausalLMJudge",
-           "HFClassifier", "WolfDefenderJev"]
+           "HFClassifier", "WolfDefenderJev", "WolfDefenderJevONNX"]

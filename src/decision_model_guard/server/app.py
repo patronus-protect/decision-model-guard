@@ -1,6 +1,6 @@
 """HTTP API (FastAPI), LLM Guard API style.
 
-    steerguard serve --config config.yml --port 8000
+    dmguard serve --config config.yml --port 8000
 
 Endpoints:
     GET  /healthz            liveness
@@ -10,7 +10,7 @@ Endpoints:
     POST /v1/decide          one guarded decision
     POST /v1/decide/batch    {"requests": [...]} -> list of guarded decisions
 
-Authentication: set `server.auth_token_env` in the config (or STEERGUARD_TOKEN) and send `Authorization: Bearer <token>`.
+Authentication: set `server.auth_token_env` in the config (or DMGUARD_TOKEN) and send `Authorization: Bearer <token>`.
 """
 # no "from __future__ import annotations": FastAPI resolves the locally defined request models at runtime
 import hmac
@@ -36,7 +36,7 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
     elif isinstance(config, dict):
         cfg = config
     srv = cfg.get("server", {}) or {}
-    token = auth_token or os.environ.get(srv.get("auth_token_env", "STEERGUARD_TOKEN") or "STEERGUARD_TOKEN")
+    token = auth_token or os.environ.get(srv.get("auth_token_env", "DMGUARD_TOKEN") or "DMGUARD_TOKEN")
     max_body = int(srv.get("max_body_bytes", max_body_bytes))
     state: dict[str, Any] = {"guard": guard}
     lock = threading.Lock()
@@ -68,7 +68,7 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
     class BatchIn(BaseModel):
         requests: list[DecideIn] = Field(min_length=1, max_length=256)
 
-    app = fastapi.FastAPI(title="SteerGuard", version=__import__("steerguard").__version__,
+    app = fastapi.FastAPI(title="Decision Model Guard", version=__import__("decision_model_guard").__version__,
                           description="Guardrails for decision models: steering gate, content scanners and decision checks.")
 
     @app.middleware("http")
@@ -95,13 +95,13 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
 
     @app.get("/metrics", response_class=fastapi.responses.PlainTextResponse)
     def prom():
-        lines = ["# TYPE steerguard_requests_total counter"]
-        lines += [f'steerguard_requests_total{{endpoint="{k[9:]}"}} {v}' for k, v in sorted(metrics.items()) if k.startswith("requests:")]
-        lines += ["# TYPE steerguard_decisions_total counter"]
-        lines += [f'steerguard_decisions_total{{action="{k[7:]}"}} {v}' for k, v in sorted(metrics.items()) if k.startswith("action:")]
-        lines += [f"steerguard_unauthorized_total {metrics['unauthorized_total']}",
-                  "# TYPE steerguard_decision_latency_ms summary",
-                  f"steerguard_decision_latency_ms_sum {latency['sum']:.3f}", f"steerguard_decision_latency_ms_count {latency['count']}"]
+        lines = ["# TYPE dmguard_requests_total counter"]
+        lines += [f'dmguard_requests_total{{endpoint="{k[9:]}"}} {v}' for k, v in sorted(metrics.items()) if k.startswith("requests:")]
+        lines += ["# TYPE dmguard_decisions_total counter"]
+        lines += [f'dmguard_decisions_total{{action="{k[7:]}"}} {v}' for k, v in sorted(metrics.items()) if k.startswith("action:")]
+        lines += [f"dmguard_unauthorized_total {metrics['unauthorized_total']}",
+                  "# TYPE dmguard_decision_latency_ms summary",
+                  f"dmguard_decision_latency_ms_sum {latency['sum']:.3f}", f"dmguard_decision_latency_ms_count {latency['count']}"]
         return "\n".join(lines) + "\n"
 
     @app.post("/v1/scan")

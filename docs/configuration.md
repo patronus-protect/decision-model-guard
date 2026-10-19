@@ -1,6 +1,6 @@
 # Configuration
 
-`build_guard(path_or_dict, model=None)` builds a `DecisionGuard`. `steerguard init-config` writes this example:
+`build_guard(path_or_dict, model=None)` builds a `DecisionGuard`. `dmguard init-config` writes this example:
 
 ```yaml
 model:
@@ -38,7 +38,7 @@ boundary_note: false
 
 | type | Parameters |
 |---|---|
-| `wolf_defender_jev` | `repo` (default `patronus-studio/wolf-defender-jev`), `device`, `revision`, `max_tokens`, `max_sq` |
+| `wolf_defender_jev` | `repo` (default `patronus-studio/wolf-defender-jev`), `device`, `revision`, `max_tokens`, `max_sq`, `onnx` (with `threads`, `providers`) |
 | `systemone_http` | `url`, `model`, `headers`, `api_key_env`, `timeout`, `retries`, `concurrency`, `state_key` |
 | `openai_compatible` | `base_url`, `model`, `api_key_env`, `headers`, `timeout`, `retries`, `concurrency`, `top_logprobs`, `system_prompt` |
 | `causal_lm` | `model_id`, `device`, `dtype`, `max_tokens`, `system_prompt` |
@@ -46,4 +46,5 @@ boundary_note: false
 | `callable` | `target: "package.module:name"` (a decide function, a model object, or a class / factory called with the remaining keys), `name` |
 
 `gate: false` disables the gate. With `selector: detector` the gate reuses a configured `ClaimDetector` scanner (or
-creates one). `audit` takes `path`, `include_text` and `max_bytes`; `server` takes `auth_token_env` and `max_body_bytes`.
+creates one, taking `threshold`, `device` and `onnx` from the gate section). `PromptInjection` and `ClaimDetector` take
+`onnx` as well. `audit` takes `path`, `include_text` and `max_bytes`; `server` takes `auth_token_env` and `max_body_bytes`.

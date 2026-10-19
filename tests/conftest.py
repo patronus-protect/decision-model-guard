@@ -8,9 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))      # makes "helpers" 
 
 
 def pytest_collection_modifyitems(config, items):
-    if os.environ.get("STEERGUARD_SLOW") == "1":
+    if os.environ.get("DMGUARD_SLOW") == "1":
         return
-    skip = pytest.mark.skip(reason="set STEERGUARD_SLOW=1 to run tests with real models")
+    skip = pytest.mark.skip(reason="set DMGUARD_SLOW=1 to run tests with real models")
     for item in items:
         if "slow" in item.keywords:
             item.add_marker(skip)
