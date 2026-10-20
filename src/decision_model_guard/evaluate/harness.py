@@ -23,10 +23,10 @@ from typing import Any
 
 import yaml
 
-from ..models.base import DecideBatch, DecisionModel, as_model
+from ..models.base import DecideBatch, DecisionModel, as_model, checked
 from ..pipeline import DecisionGuard
 from ..scene import TRUSTED_HEADERS, parse_blocks
-from ..util import argmax, normalize
+from ..util import argmax
 
 
 def _data(name: str) -> str:
@@ -129,7 +129,7 @@ def evaluate(model: DecisionModel | DecideBatch, cases: Sequence[dict[str, Any]]
     calls = []
 
     def ask_raw(scene, c):
-        return argmax(normalize(m.decide_batch([scene], c["question"], c["options"])[0]))
+        return argmax(checked(m, [scene], c["question"], c["options"])[0])
 
     def ask_guard(scene, c):
         d = guard.decide(scene, c["question"], c["options"], risky=c.get("risky"), order=c.get("order"), fallback=c.get("fallback"))

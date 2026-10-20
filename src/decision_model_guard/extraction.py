@@ -24,6 +24,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from .input_scanners.base import Scanner
+from .models.base import ModelOutputError
 from .pipeline import scan_scene
 from .scene import TRUSTED_HEADERS, Scene, as_text, erase, parse_blocks, units
 from .types import ScanResult
@@ -97,6 +98,30 @@ class GuardedExtraction:
                 "scans": [s.to_dict() for s in self.scans]}
 
 
+class FunctionExtractor:
+    """Wrap a callable `fn(scenes, fields) -> [{field: answer}]` as an extraction model."""
+
+    def __init__(self, fn: Callable[[Sequence[str], dict[str, dict[str, Any]]], list[dict[str, dict[str, Any]]]], name: str | None = None):
+        self.fn, self.name = fn, name or getattr(fn, "__name__", "function")
+
+    def extract(self, scenes: Sequence[str], fields: dict[str, dict[str, Any]]) -> list[dict[str, dict[str, Any]]]:
+        return self.fn(list(scenes), fields)
+
+
+def check_extractions(outs: Any, n: int, fields: dict[str, dict[str, Any]], name: str = "model") -> list[dict[str, Any]]:
+    """Validate an extract result: one dict per scene, every answer a dict (or missing / None)."""
+    if not isinstance(outs, (list, tuple)) or len(outs) != n:
+        got = f"{len(outs)} results" if isinstance(outs, (list, tuple)) else type(outs).__name__
+        raise ModelOutputError(f"{name}: extract must return one dict per scene ({n}), got {got}")
+    for o in outs:
+        if not isinstance(o, dict):
+            raise ModelOutputError(f"{name}: extract must return dicts {{field: answer}}, got {type(o).__name__}")
+        for k in fields:
+            if o.get(k) is not None and not isinstance(o[k], dict):
+                raise ModelOutputError(f"{name}: the answer for {k!r} must be a dict such as {{'value': ...}}, got {type(o[k]).__name__}")
+    return list(outs)
+
+
 class ExtractionGuard:
     """Erase flagged claims before trusting extracted values.
 
@@ -105,20 +130,26 @@ class ExtractionGuard:
     rel_tol: numbers within this relative distance count as unchanged.
     full_check / cautious: erase-and-check over every unit (up to `max_variants`) for all fields / the named fields."""
 
-    def __init__(self, model: ExtractionModel, detector: UnitScorer | None = None, scanners: Sequence[Scanner] = (),
+    def __init__(self, model: ExtractionModel | Callable, detector: UnitScorer | None = None, scanners: Sequence[Scanner] = (),
                  threshold: float = 0.3, window: int = 3, rel_tol: float = 0.1, full_check: bool = False, max_variants: int = 24,
                  trusted_headers: Sequence[str] = TRUSTED_HEADERS, use_sanitized: bool = True):
         if not hasattr(model, "extract"):
-            raise TypeError("the model needs extract(scenes, fields) -> [{field: answer}]")
+            if not callable(model):
+                raise TypeError("the model needs extract(scenes, fields) -> [{field: answer}], or is such a callable")
+            model = FunctionExtractor(model)
         self.model, self.detector, self.scanners = model, detector, list(scanners)
         self.threshold, self.window, self.rel_tol, self.full_check, self.max_variants = threshold, window, rel_tol, full_check, max_variants
         self.trusted, self.use_sanitized = tuple(trusted_headers), use_sanitized
 
     @classmethod
-    def default(cls, model: ExtractionModel, onnx: str | None = None, **kw) -> ExtractionGuard:
-        """Rule-based scanners plus the claim detector (`onnx="int8_int4_embeddings"` runs it without torch)."""
+    def default(cls, model: ExtractionModel | Callable, onnx: str | None = None, extra_scanners: Sequence[Scanner] = (), **kw) -> ExtractionGuard:
+        """Rule-based scanners plus the claim detector (`onnx="int8_int4_embeddings"` runs it without torch).
+        `extra_scanners` are appended to the default scanners."""
         from .input_scanners import ClaimDetector, ForgedTrustBlock, InvisibleText, VerdictTokens
-        return cls(model, detector=ClaimDetector(onnx=onnx), scanners=[InvisibleText(), ForgedTrustBlock(), VerdictTokens()], **kw)
+        if "scanners" in kw or "detector" in kw:
+            raise TypeError("default() sets scanners and detector itself; pass extra_scanners=[...] or build ExtractionGuard(...)")
+        return cls(model, detector=ClaimDetector(onnx=onnx), scanners=[InvisibleText(), ForgedTrustBlock(), VerdictTokens(), *extra_scanners],
+                   **kw)
 
     def _units(self, scene: str) -> list[tuple[int, int]]:
         return [u for b in parse_blocks(scene, self.trusted) if not b.trusted for u in units(scene, b, self.window)]
@@ -154,7 +185,7 @@ class ExtractionGuard:
         need_variants = self.full_check or bool(cautious)
         singles = all_units[: self.max_variants] if need_variants else []
         scenes = [sc] + ([cleaned] if merged else []) + [erase(sc, a, b) for a, b in singles]
-        outs = self.model.extract(scenes, fields)
+        outs = check_extractions(self.model.extract(scenes, fields), len(scenes), fields, getattr(self.model, "name", type(self.model).__name__))
         raw, clean = outs[0], (outs[1] if merged else None)
         variants = outs[(2 if merged else 1):]
         flagged_text = [sc[a:b].strip() for a, b in merged]

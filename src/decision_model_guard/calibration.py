@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from .models.base import DecideBatch, DecisionModel, as_model
+from .models.base import DecideBatch, DecisionModel, as_model, checked
 from .types import GuardReport, Kind
 from .util import argmax, normalize
 
@@ -85,8 +85,8 @@ def collect(model: DecisionModel | DecideBatch, cases: Sequence[dict[str, Any]])
         groups.setdefault((c["question"], tuple(c["options"])), []).append(i)
     P: list[list[float] | None] = [None] * len(cases)
     for (q, opts), idx in groups.items():
-        for i, p in zip(idx, m.decide_batch([cases[i]["scene"] for i in idx], q, list(opts)), strict=True):
-            P[i] = normalize(p)
+        for i, p in zip(idx, checked(m, [cases[i]["scene"] for i in idx], q, opts), strict=True):
+            P[i] = p
     return [p for p in P if p is not None], [int(c["gold"]) for c in cases]
 
 

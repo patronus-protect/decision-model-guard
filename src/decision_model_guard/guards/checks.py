@@ -5,9 +5,9 @@ import itertools
 import random
 from collections.abc import Sequence
 
-from ..models.base import DecisionModel
+from ..models.base import DecisionModel, checked
 from ..types import GuardReport, Kind
-from ..util import argmax, normalize
+from ..util import argmax
 
 
 class OptionOrder:
@@ -51,7 +51,7 @@ class OptionOrder:
             return GuardReport(self.name, False)
         mapped = []
         for perm in orders:
-            p = normalize(model.decide_batch([scene], question, [options[i] for i in perm])[0])
+            p = checked(model, [scene], question, [options[i] for i in perm])[0]
             back = [0.0] * len(options)
             for pos, orig in enumerate(perm):
                 back[orig] = p[pos]

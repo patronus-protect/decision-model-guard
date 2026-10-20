@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from ..models.base import DecisionModel
+from ..models.base import DecisionModel, checked
 from ..scene import TRUSTED_HEADERS, parse_blocks, sentences
 from ..types import GuardReport, Kind
-from ..util import argmax, normalize
+from ..util import argmax
 
 
 def _approx_tokens(text: str) -> int:
@@ -108,7 +108,7 @@ class Coverage:
             P = [self.gate.run(model, w, question, options, kind, risky, order)[1].probs for w in wins]
             calls = sum(1 + len(self.gate.variants(w, kind)[0]) for w in wins)
         else:
-            P = [normalize(p) for p in model.decide_batch(wins, question, options)]
+            P = checked(model, wins, question, options)
             calls = len(wins)
         base = list(probs)
         top = argmax(base)

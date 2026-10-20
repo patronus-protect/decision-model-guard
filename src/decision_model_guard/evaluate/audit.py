@@ -29,10 +29,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..guards.invariance import OPTION_TRANSFORMS, render
-from ..models.base import DecideBatch, DecisionModel, as_model
+from ..models.base import DecideBatch, DecisionModel, as_model, checked
 from ..pipeline import DecisionGuard
 from ..types import Action
-from ..util import argmax, normalize
+from ..util import argmax
 from .harness import claim_bank, default_target, insert, load_cases, neutral_bank
 
 FAMILIES: dict[str, tuple[str, str]] = {
@@ -215,7 +215,7 @@ def audit(model: DecisionModel | DecideBatch, cases: Sequence[dict[str, Any]] | 
 
     def ask(scenes: list[str], c: dict, options: Sequence[str]) -> list[int]:
         calls["raw"] += len(scenes)
-        return [argmax(normalize(p)) for p in m.decide_batch(scenes, c["question"], list(options))]
+        return [argmax(p) for p in checked(m, scenes, c["question"], options)]
 
     def ask_guard(scene: str, c: dict, options: Sequence[str], perm: Sequence[int] | None = None):
         to_v = (lambda i: list(perm).index(i)) if perm else (lambda i: i)       # original option index -> index in this variant

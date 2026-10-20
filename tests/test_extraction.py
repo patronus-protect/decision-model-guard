@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from decision_model_guard import DecisionGuard, ExtractionGuard, SteeringGate, build_guard
+from decision_model_guard import DecisionGuard, ExtractionGuard, ModelOutputError, SteeringGate, build_guard
 from decision_model_guard.evaluate import evaluate_extraction, load_extraction_cases
 from decision_model_guard.extraction import differs, scalar
 from decision_model_guard.input_scanners import ForgedTrustBlock
@@ -92,6 +92,28 @@ def test_cautious_direction_and_full_check():
         plain.extract(BASE, FIELDS, cautious={"payout": "sideways"})
     with pytest.raises(TypeError):
         ExtractionGuard(object())
+
+
+def test_plain_functions_and_output_validation():
+    fn = lambda scenes, fields: ToyExtractor().extract(scenes, fields)  # noqa: E731
+    assert ExtractionGuard(fn, detector=detector).extract(ATTACK, FIELDS).fields["payout"].value == 920.0
+    short = lambda scenes, fields: [{"payout": {"value": 1.0}}]  # noqa: E731
+    with pytest.raises(ModelOutputError, match="one dict per scene"):
+        ExtractionGuard(short, detector=detector).extract(ATTACK, FIELDS)          # 0.1.2: the cleaned scene was never checked
+    with pytest.raises(ModelOutputError, match="one dict per scene"):
+        ExtractionGuard(short, detector=None).extract(BASE, FIELDS, cautious={"payout": "low"})
+    with pytest.raises(ModelOutputError, match="must be a dict"):
+        ExtractionGuard(lambda s, f: [{"payout": 1840.0} for _ in s]).extract(BASE, FIELDS)
+    with pytest.raises(ModelOutputError):
+        ExtractionGuard(lambda s, f: {"payout": {"value": 1.0}}).extract(BASE, FIELDS)
+
+
+def test_default_takes_extra_scanners():
+    from decision_model_guard.input_scanners import BanSubstrings
+    g = ExtractionGuard.default(ToyExtractor(), onnx="int8_int4_embeddings", extra_scanners=[BanSubstrings(["x"])])
+    assert [s.name for s in g.scanners][-1] == "BanSubstrings"
+    with pytest.raises(TypeError, match="extra_scanners"):
+        ExtractionGuard.default(ToyExtractor(), scanners=[])
 
 
 def test_value_helpers():

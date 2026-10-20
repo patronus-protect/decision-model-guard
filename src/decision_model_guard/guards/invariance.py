@@ -11,10 +11,10 @@ import json
 import re
 from collections.abc import Callable, Sequence
 
-from ..models.base import DecisionModel
+from ..models.base import DecisionModel, checked
 from ..scene import TRUSTED_HEADERS, parse_blocks
 from ..types import GuardReport, Kind
-from ..util import argmax, normalize
+from ..util import argmax
 
 FORMATS = ("markdown", "kv", "json", "compact")
 
@@ -82,11 +82,11 @@ class Invariance:
         variants = [(f, render(scene, f, self.trusted)) for f in self.formats]
         variants = [(f, s) for f, s in variants if s != scene]
         if variants:
-            P = model.decide_batch([s for _, s in variants], question, options)
+            P = checked(model, [s for _, s in variants], question, options)
             calls += len(variants)
             for (f, _), p in zip(variants, P, strict=True):
                 checks += 1
-                if argmax(normalize(p)) != base:
+                if argmax(p) != base:
                     changed.append(f"format:{f}")
         option_sets = [(f"options:{t}", [OPTION_TRANSFORMS[t](o) for o in options]) for t in self.option_transforms]
         option_sets += [(f"options:variant{i + 1}", v) for i, v in enumerate(self.option_variants)]
@@ -97,12 +97,12 @@ class Invariance:
                 continue
             checks += 1
             calls += 1
-            if argmax(normalize(model.decide_batch([scene], question, opts)[0])) != base:
+            if argmax(checked(model, [scene], question, opts)[0]) != base:
                 changed.append(label)
         for i, q in enumerate(self.question_variants):
             checks += 1
             calls += 1
-            if argmax(normalize(model.decide_batch([scene], q, options)[0])) != base:
+            if argmax(checked(model, [scene], q, options)[0]) != base:
                 changed.append(f"question:variant{i + 1}")
         return GuardReport(self.name, len(changed) > self.tolerance, len(changed) / max(1, checks), calls,
                            {"checks": checks, "changed_under": changed})

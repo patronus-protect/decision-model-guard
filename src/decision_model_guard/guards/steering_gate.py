@@ -6,10 +6,10 @@ import random
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from ..models.base import DecisionModel
+from ..models.base import DecisionModel, checked
 from ..scene import TRUSTED_HEADERS, erase, parse_blocks, units
 from ..types import GuardReport, Kind
-from ..util import argmax, normalize
+from ..util import argmax
 
 UnitScorer = Callable[[Sequence[str]], list[float]]
 
@@ -101,7 +101,7 @@ class SteeringGate:
     def run(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], kind: Kind,
             risky: Sequence[int] | None = None, order: Sequence[int] | None = None, hints: Sequence[str] = ()) -> tuple[GuardReport, GateOutcome]:
         V, n_flagged = self.variants(scene, kind, hints)
-        P = [normalize(p) for p in model.decide_batch([scene] + [v for v, _ in V], question, options)]
+        P = checked(model, [scene] + [v for v, _ in V], question, options)
         top = [argmax(p) for p in P]
         changed = [i for i in range(1, len(P)) if top[i] != top[0]]
         stable = not changed

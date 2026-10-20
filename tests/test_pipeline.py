@@ -9,6 +9,7 @@ from decision_model_guard import (
     AuditLogger,
     Confidence,
     DecisionGuard,
+    ModelOutputError,
     OptionOrder,
     Policy,
     Request,
@@ -123,3 +124,22 @@ def test_guard_decision_helper_and_scene_object():
 def test_to_dict_is_json_serialisable():
     d = DecisionGuard(refund_toy, scanners=[VerdictTokens()], gate=SteeringGate()).decide(REFUND, "How?", REFUND_OPTS, order=[0, 1, 2])
     json.dumps(d.to_dict(include_scene=True))
+
+
+BROKEN = {"nan": lambda s, q, o: [[0.1, float("nan")] for _ in s], "logits": lambda s, q, o: [[-3.0, -1.0] for _ in s],
+          "negative": lambda s, q, o: [[-1.0, 3.0] for _ in s], "zeros": lambda s, q, o: [[0.0, 0.0] for _ in s],
+          "inf": lambda s, q, o: [[1.0, float("inf")] for _ in s], "too many scores": lambda s, q, o: [[0.1, 0.2, 0.7] for _ in s],
+          "not numbers": lambda s, q, o: [["a", "b"] for _ in s]}
+
+
+@pytest.mark.parametrize("name", list(BROKEN))
+def test_broken_model_output_raises_instead_of_allowing(name):
+    for gate in (None, SteeringGate()):            # 0.1.2 turned these into uniform probabilities: option 0, action allow
+        with pytest.raises(ModelOutputError):
+            DecisionGuard(BROKEN[name], gate=gate).decide(INJECTION, "Injection?", INJ_OPTS, risky={1})
+
+
+def test_too_few_rows_do_not_switch_the_gate_off():
+    only_first = lambda s, q, o: [[0.1, 0.1, 0.8] if "eligible" in s[0] else [0.8, 0.1, 0.1]]  # noqa: E731
+    with pytest.raises(ModelOutputError, match="rows for"):
+        DecisionGuard(only_first, gate=SteeringGate()).decide(REFUND, "How?", REFUND_OPTS, order=[0, 1, 2])
