@@ -116,10 +116,16 @@ def cmd_calibrate(args) -> int:
 
 
 def cmd_serve(args) -> int:
+    import logging
+
     from .server import create_app
     from .util import require
     uvicorn = require("uvicorn", "server")
-    uvicorn.run(create_app(config=args.config), host=args.host, port=args.port, log_level=args.log_level)
+    logging.basicConfig(level=args.log_level.upper(), format="%(levelname)s:     %(name)s: %(message)s")
+    app = create_app(config=args.config)
+    if not app.state.auth and args.host not in ("127.0.0.1", "localhost", "::1"):
+        logging.getLogger("decision_model_guard.server").warning("listening on %s without authentication", args.host)
+    uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level, timeout_graceful_shutdown=10)
     return 0
 
 

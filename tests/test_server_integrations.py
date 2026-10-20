@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from conftest import REFUND, REFUND_OPTS
 
@@ -36,6 +38,45 @@ def test_auth_token():
     assert c.post("/v1/decide", json=body).status_code == 401
     assert c.post("/v1/decide", json=body, headers={"Authorization": "Bearer s3cret"}).status_code == 200
     assert c.get("/healthz").status_code == 200
+
+
+def test_configured_token_variable_must_be_set(monkeypatch):
+    cfg = {"model": {"type": "callable", "target": "helpers:refund_toy"}, "server": {"auth_token_env": "DMG_TEST_TOKEN"}}
+    monkeypatch.delenv("DMG_TEST_TOKEN", raising=False)
+    monkeypatch.setenv("DMGUARD_TOKEN", "other")
+    with pytest.raises(ValueError, match="DMG_TEST_TOKEN"):           # 0.1.2 started without auth
+        create_app(config=cfg)
+    monkeypatch.setenv("DMG_TEST_TOKEN", "s3cret")
+    c = TestClient(create_app(config=cfg))
+    body = {"scene": REFUND, "question": "How?", "options": REFUND_OPTS}
+    r = c.post("/v1/decide", json=body)
+    assert r.status_code == 401 and r.headers["www-authenticate"] == "Bearer"
+    assert c.post("/v1/decide", json=body, headers={"Authorization": "bearer s3cret"}).status_code == 200
+    with pytest.raises(ValueError, match="unknown server keys"):
+        create_app(config={**cfg, "server": {"port": 9000}})
+
+
+def test_body_limit_counts_received_bytes_and_caps_scene_and_meta():
+    c = TestClient(create_app(guard=guard(), max_body_bytes=1000, max_scene_chars=300, max_meta_bytes=50))
+    big = json.dumps({"scene": "[USER PROMPT]\nhi", "question": "q", "options": ["a", "b"], "meta": {"pad": "x" * 3000}}).encode()
+    def chunks():
+        for i in range(0, len(big), 256):
+            yield big[i:i + 256]
+    r = c.post("/v1/decide", content=chunks(), headers={"Content-Type": "application/json"})   # no Content-Length: chunked
+    assert r.status_code == 413                                       # 0.1.2 accepted it
+    body = {"question": "q", "options": ["a", "b"]}
+    assert c.post("/v1/decide", json={**body, "scene": "[USER PROMPT]\n" + "x" * 400}).status_code == 413
+    assert c.post("/v1/decide", json={**body, "scene": "[USER PROMPT]\nhi", "meta": {"pad": "x" * 60}}).status_code == 413
+    assert c.post("/v1/decide", json={**body, "scene": "[USER PROMPT]\nhi", "meta": {"ticket": 7}}).status_code == 200
+
+
+def test_docs_can_be_switched_off_and_slow_decisions_time_out():
+    import time as _t
+    assert TestClient(create_app(guard=guard())).get("/openapi.json").status_code == 200
+    assert TestClient(create_app(guard=guard(), docs=False)).get("/openapi.json").status_code == 404
+    slow = DecisionGuard(lambda s, q, o: _t.sleep(0.5) or [[0.5, 0.5]] * len(s))
+    r = TestClient(create_app(guard=slow, request_timeout=0.1)).post("/v1/decide", json={"scene": "x", "question": "q", "options": ["a", "b"]})
+    assert r.status_code == 504
 
 
 def test_scan_text_is_untrusted_with_offsets_into_the_text():

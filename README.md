@@ -318,7 +318,7 @@ dmguard serve --config dmguard.yml --port 8000
 
 ## API server
 
-`dmguard serve` starts a FastAPI app with `POST /v1/decide`, `POST /v1/decide/batch`, `POST /v1/scan`, `GET /healthz`, `GET /readyz` and `GET /metrics` (Prometheus). Set `server.auth_token_env` (default `DMGUARD_TOKEN`) to require a bearer token. See [docs/api.md](https://github.com/patronus-protect/decision-model-guard/blob/main/).
+`dmguard serve` starts a FastAPI app with `POST /v1/decide`, `POST /v1/decide/batch`, `POST /v1/scan`, `GET /healthz`, `GET /readyz` and `GET /metrics` (Prometheus). Set the environment variable `DMGUARD_TOKEN`, or name another one in `server.auth_token_env`, to require a bearer token; a configured variable that is not set stops the server from starting. See [docs/api.md](https://github.com/patronus-protect/decision-model-guard/blob/main/).
 
 ```bash
 curl -s localhost:8000/v1/decide -H 'Content-Type: application/json' -d '{
