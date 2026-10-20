@@ -94,6 +94,9 @@ class Policy:
                     raise_to(Action.CAUTIOUS)
                 else:
                     raise_to(Action.ESCALATE)
+        if gate.unerased:                                # flagged text the gate found no unit for: nothing was checked
+            reasons.append(f"content scanners: {gate.unerased} flagged piece(s) could not be erased")
+            raise_to(Action.ESCALATE)
         for g in guards:
             if g.guard == "Coverage" and g.detail.get("truncated") and not g.triggered:
                 reasons.append(f"long content: {g.detail.get('windows', 0)} windows checked, none moves the decision")

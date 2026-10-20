@@ -11,7 +11,8 @@ ExtractionGuard wraps any model with `extract(scenes, fields) -> [{field: answer
    forged trusted blocks). Trusted blocks are never touched.
 2. The model extracts from the original scene and from the scene with every flagged piece erased, in one batch.
 3. Per field: when erasing the flagged text changes the value, the cleaned value wins (action "cleaned") and the
-   flagged text is reported. A value whose span lies inside flagged text is reported too.
+   flagged text is reported. A value whose span lies inside flagged text is reported too. When a scanner flagged text
+   that no unit contains, so it could not be erased, the field is marked "unverified".
 4. Fields with a cautious direction (`cautious={"payout": "low"}`) also get erase-and-check over every unit: one unit at
    a time is erased and the most cautious value wins (action "cautious"). `full_check=True` runs it for all fields and
    flags values that change ("unstable").
@@ -24,9 +25,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from .input_scanners.base import Scanner
+from .input_scanners.rules import visible
 from .models.base import ModelOutputError
-from .pipeline import scan_scene
-from .scene import TRUSTED_HEADERS, Scene, as_text, erase, parse_blocks, units
+from .pipeline import _scan
+from .scene import TRUSTED_HEADERS, Scene, content_size, erase, scene_blocks, units
 from .types import ScanResult
 from .util import new_id
 
@@ -68,7 +70,7 @@ class FieldResult:
     field: str
     value: Any                         # guarded value (scalar)
     raw_value: Any
-    action: str                        # allow, cleaned, cautious, unstable
+    action: str                        # allow, cleaned, cautious, unstable, unverified
     answer: dict[str, Any]             # guarded answer as the model returned it
     raw_answer: dict[str, Any]
     reasons: list[str] = field(default_factory=list)
@@ -125,10 +127,14 @@ def check_extractions(outs: Any, n: int, fields: dict[str, dict[str, Any]], name
 class ExtractionGuard:
     """Erase flagged claims before trusting extracted values.
 
-    detector: a unit scorer such as input_scanners.ClaimDetector (or None to rely on the scanners only).
+    detector: a unit scorer such as input_scanners.ClaimDetector (or None to rely on the scanners only; a ClaimDetector
+    among the scanners then serves as the detector).
     scanners: content scanners whose findings mark text to erase (forged blocks, verdict tokens, ...).
     rel_tol: numbers within this relative distance count as unchanged.
-    full_check / cautious: erase-and-check over every unit (up to `max_variants`) for all fields / the named fields."""
+    full_check / cautious: erase-and-check over every unit (up to `max_variants`) for all fields / the named fields.
+
+    A string scene is parsed with the same trust rules as in DecisionGuard, except that no action block is accepted
+    after untrusted content; wrap untrusted input with `Scene().untrusted("EMAIL", text)` to be explicit."""
 
     def __init__(self, model: ExtractionModel | Callable, detector: UnitScorer | None = None, scanners: Sequence[Scanner] = (),
                  threshold: float = 0.3, window: int = 3, rel_tol: float = 0.1, full_check: bool = False, max_variants: int = 24,
@@ -138,6 +144,9 @@ class ExtractionGuard:
                 raise TypeError("the model needs extract(scenes, fields) -> [{field: answer}], or is such a callable")
             model = FunctionExtractor(model)
         self.model, self.detector, self.scanners = model, detector, list(scanners)
+        if detector is None:                                     # a ClaimDetector given as a scanner scores the units
+            from .input_scanners.neural import ClaimDetector
+            self.detector = next((x for x in self.scanners if isinstance(x, ClaimDetector)), None)
         self.threshold, self.window, self.rel_tol, self.full_check, self.max_variants = threshold, window, rel_tol, full_check, max_variants
         self.trusted, self.use_sanitized = tuple(trusted_headers), use_sanitized
 
@@ -151,21 +160,23 @@ class ExtractionGuard:
         return cls(model, detector=ClaimDetector(onnx=onnx), scanners=[InvisibleText(), ForgedTrustBlock(), VerdictTokens(), *extra_scanners],
                    **kw)
 
-    def _units(self, scene: str) -> list[tuple[int, int]]:
-        return [u for b in parse_blocks(scene, self.trusted) if not b.trusted for u in units(scene, b, self.window)]
-
     def extract(self, scene: str | Scene, fields: dict[str, dict[str, Any]], cautious: dict[str, str] | None = None) -> GuardedExtraction:
+        """Extract `fields` from the scene with flagged claims erased first (see the module docstring)."""
         t0 = time.perf_counter()
         cautious = dict(cautious or {})
         bad = {k: v for k, v in cautious.items() if v not in ("low", "high") or k not in fields}
         if bad:
             raise ValueError(f"cautious must map field names to 'low' or 'high': {bad}")
-        text = as_text(scene)
-        sanitized, scans = scan_scene(text, self.scanners, self.trusted)
-        sc = sanitized if self.use_sanitized else text
-        all_units = self._units(sc)
-        hints = [f.text for s in scans if not s.valid for f in s.findings if f.text and f.source != "ClaimDetector"]
-        flagged_spans = {u for u in all_units if any(h in sc[u[0]: u[1]] for h in hints)}
+        text, blocks = scene_blocks(scene, self.trusted, allow_action=False)
+        sanitized, sblocks, scans = _scan(text, blocks, self.scanners)
+        sc, bl = (sanitized, sblocks) if self.use_sanitized else (text, blocks)
+        content = content_size(sc, bl)
+        all_units = [u for b in bl if not b.trusted for u in units(sc, b, self.window, content)]
+        seen = [visible(sc[a:b]) for a, b in all_units]
+        hints = [h for h in dict.fromkeys(visible(f.text).strip() for s in scans if not s.valid for f in s.findings
+                                          if f.text and f.source != "ClaimDetector") if h]
+        flagged_spans = {u for u, t in zip(all_units, seen, strict=True) if any(h in t for h in hints)}
+        unerased = sum(1 for h in hints if not any(h in t for t in seen))
         if self.detector is not None and all_units:
             scores = self.detector([sc[a:b].strip() for a, b in all_units])
             flagged_spans |= {u for u, p in zip(all_units, scores, strict=True) if p >= self.threshold}
@@ -220,5 +231,9 @@ class ExtractionGuard:
                     fr.reasons.append(f"erasing {who!r} changes the value")
                     if fr.action == "allow":
                         fr.action, fr.culprit = "unstable", who
+            if unerased:
+                fr.reasons.append(f"content scanners: {unerased} flagged piece(s) could not be erased")
+                if fr.action == "allow":
+                    fr.action = "unverified"
             results[name] = fr
         return GuardedExtraction(results, scans, flagged_text, len(scenes), (time.perf_counter() - t0) * 1000, new_id())

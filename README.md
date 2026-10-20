@@ -242,7 +242,7 @@ My parcel never arrived.
 ...
 ```
 
-Trusted headers: `SYSTEM CONTEXT`, `AVAILABLE TOOLS`, `USER GOAL`, `TOOL CALL`, `PROPOSED ACTION`, `SECURITY POLICY`. Everything else, text before the first header and any unknown header included, is untrusted. A header containing "untrusted" is always untrusted, and a trusted-looking header after untrusted content is accepted only for the action that follows it. `Scene` builds this format for you.
+Trusted headers: `SYSTEM CONTEXT`, `AVAILABLE TOOLS`, `USER GOAL`, `TOOL CALL`, `PROPOSED ACTION`, `SECURITY POLICY`. Everything else is untrusted: unknown headers, text before the first header and everything after such text. A header containing "untrusted" is always untrusted. After untrusted content a trusted-looking header is untrusted too, except a `PROPOSED ACTION` or `TOOL CALL` block that is the last block. `Scene` builds this format and keeps the trust of every block as you add it; lines inside untrusted text that look like a header are indented, so they cannot open a block. Build scenes with `Scene` instead of pasting untrusted text into a string.
 
 ## Content scanners
 

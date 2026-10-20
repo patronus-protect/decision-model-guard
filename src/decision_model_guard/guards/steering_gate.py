@@ -6,8 +6,9 @@ import random
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from ..input_scanners.rules import visible
 from ..models.base import DecisionModel, checked
-from ..scene import TRUSTED_HEADERS, erase, parse_blocks, units
+from ..scene import TRUSTED_HEADERS, Block, content_size, erase, parse_blocks, units
 from ..types import GuardReport, Kind
 from ..util import argmax
 
@@ -28,13 +29,15 @@ class GateOutcome:
     erased: list[str] = field(default_factory=list)
     variant_probs: list[list[float]] = field(default_factory=list)
     detector_flagged: int = 0
+    unerased: int = 0                  # scanner findings (hints) that no unit contains, so no variant erased them
 
 
 class SteeringGate:
     """Erase-and-check around a decision model.
 
-    1. Untrusted blocks are cut into units: whole blocks with unknown headers, paragraphs, windows of 1 to `window`
-       sentences, edge units first. Trusted blocks are never touched.
+    1. Untrusted blocks are cut into units: whole blocks with unknown or trusted-looking headers, forged headers inside
+       content with the text after them, paragraphs, windows of 1 to `window` sentences, edge units first. Trusted
+       blocks are never touched, and no unit holds all untrusted content of the scene.
     2. Unit selection: `selector="all"` erases every unit once (up to `max_variants`), `selector="detector"` only the units
        the claim detector scores at or above `threshold`. With `scope="unordered"` the detector is used only for
        decisions without risky options or order, and the others keep the full check. `mode="trigger"` runs the full
@@ -76,31 +79,42 @@ class SteeringGate:
         random.Random(self.seed).shuffle(rest)
         return (head + rest)[: self.max_variants]
 
-    def variants(self, scene: str, kind: Kind = Kind.UNORDERED, hints: Sequence[str] = ()) -> tuple[list[tuple[str, str]], int]:
-        """(variant scene, erased text) pairs and the number of detector-flagged units."""
-        per_block = [units(scene, b, self.window) for b in parse_blocks(scene, self.trusted) if not b.trusted]
+    def variants(self, scene: str, kind: Kind = Kind.UNORDERED, hints: Sequence[str] = (),
+                 blocks: Sequence[Block] | None = None) -> tuple[list[tuple[str, str]], int]:
+        """(variant scene, erased text) pairs and the number of detector-flagged units. `blocks` gives the trust of each
+        block (default: parse `scene`)."""
+        v, n, _ = self._plan(scene, kind, hints, blocks)
+        return v, n
+
+    def _plan(self, scene: str, kind: Kind, hints: Sequence[str], blocks: Sequence[Block] | None) -> tuple[list[tuple[str, str]], int, int]:
+        blocks = list(blocks) if blocks is not None else parse_blocks(scene, self.trusted)
+        content = content_size(scene, blocks)
+        per_block = [units(scene, b, self.window, content) for b in blocks if not b.trusted]
         allspans = [s for us in per_block for s in us]
-        hinted = {s for s in allspans if any(h and h in scene[s[0]:s[1]] for h in hints)}
+        seen = [visible(scene[a:b]) for a, b in allspans]
+        hs = [h for h in dict.fromkeys(visible(h).strip() for h in hints if h) if h]
+        hinted = [s for s, t in zip(allspans, seen, strict=True) if any(h in t for h in hs)]
+        unerased = sum(1 for h in hs if not any(h in t for t in seen))
         use_detector = self.selector == "detector" and (self.scope == "all" or kind == Kind.UNORDERED)
         n_flagged = 0
         if use_detector:
             scores = self.detector([scene[a:b].strip() for a, b in allspans]) if allspans else []   # type: ignore[misc]
             flagged = [s for _, s in sorted(((-p, s) for s, p in zip(allspans, scores, strict=True) if p >= self.threshold))]
             n_flagged = len(flagged)
-            flagged += [s for s in allspans if s in hinted and s not in flagged]
             if self.mode == "trigger":
-                spans = self._full(scene, per_block) if flagged else []
+                spans = self._full(scene, per_block) if flagged or hinted else []
             else:
                 spans = flagged[: self.max_variants]
         else:
             spans = self._full(scene, per_block)
-            spans += [s for s in hinted if s not in spans]
-        return [(erase(scene, a, b), scene[a:b].strip()) for a, b in spans], n_flagged
+        spans += [s for s in hinted if s not in spans]
+        return [(erase(scene, a, b), scene[a:b].strip()) for a, b in spans], n_flagged, unerased
 
     # ------------------------------------------------------------------ run
     def run(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], kind: Kind,
-            risky: Sequence[int] | None = None, order: Sequence[int] | None = None, hints: Sequence[str] = ()) -> tuple[GuardReport, GateOutcome]:
-        V, n_flagged = self.variants(scene, kind, hints)
+            risky: Sequence[int] | None = None, order: Sequence[int] | None = None, hints: Sequence[str] = (),
+            blocks: Sequence[Block] | None = None) -> tuple[GuardReport, GateOutcome]:
+        V, n_flagged, unerased = self._plan(scene, kind, hints, blocks)
         P = checked(model, [scene] + [v for v, _ in V], question, options)
         top = [argmax(p) for p in P]
         changed = [i for i in range(1, len(P)) if top[i] != top[0]]
@@ -109,7 +123,7 @@ class SteeringGate:
         culprit = lambda j: V[j - 1][1] if j > 0 else None  # noqa: E731
         erased = [e for _, e in V]
         base = dict(raw=P[0], raw_index=top[0], stable=stable, alternative=alt, calls=len(P), erased=erased, variant_probs=P[1:],
-                    detector_flagged=n_flagged)
+                    detector_flagged=n_flagged, unerased=unerased)
         if kind == Kind.RISKY and risky:
             risk = [sum(p[i] for i in risky) for p in P]
             best = max(risk)
@@ -125,7 +139,8 @@ class SteeringGate:
                 flagged = True
             out = GateOutcome(probs=P[j], index=top[j], flagged=flagged, culprit=culprit(j) if j > 0 else None, **base)
             report = GuardReport(self.name, flagged, float(risk[j]), len(P), {"rule": "highest risk", "raw_risk": round(risk[0], 6),
-                                 "max_variant_risk": round(best, 6), "variants": len(V), "detector_flagged": n_flagged, "culprit": out.culprit})
+                                 "max_variant_risk": round(best, 6), "variants": len(V), "detector_flagged": n_flagged, "unerased": unerased,
+                                 "culprit": out.culprit})
             return report, out
         if kind == Kind.ORDERED and order:
             rank = {o: r for r, o in enumerate(order)}
@@ -136,11 +151,11 @@ class SteeringGate:
             out = GateOutcome(probs=P[j] if flagged else P[0], index=top[j] if flagged else top[0], flagged=flagged,
                               culprit=culprit(j) if flagged else None, **base)
             report = GuardReport(self.name, flagged, float(cons[j]), len(P), {"rule": "most cautious", "variants": len(V),
-                                 "detector_flagged": n_flagged, "culprit": out.culprit})
+                                 "detector_flagged": n_flagged, "unerased": unerased, "culprit": out.culprit})
             return report, out
         first = min(changed, key=lambda i: len(V[i - 1][1])) if changed else 0
         out = GateOutcome(probs=P[0], index=top[0], flagged=False, culprit=culprit(first) if changed else None, **base)
         report = GuardReport(self.name, not stable, float(len(changed)) / max(1, len(V)), len(P),
                              {"rule": "stability", "variants": len(V), "changed_by": len(changed), "alternative": alt,
-                              "detector_flagged": n_flagged, "culprit": out.culprit})
+                              "detector_flagged": n_flagged, "unerased": unerased, "culprit": out.culprit})
         return report, out

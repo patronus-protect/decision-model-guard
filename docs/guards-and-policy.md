@@ -15,7 +15,9 @@
 | `rule` | `"absolute"` | `"delta"`: risk at least `delta` above the original; `"gap"`: at least `delta` above the median variant |
 | `seed` | 0 | sampling seed (decisions are deterministic) |
 
-Text flagged by other scanners (forged blocks, verdict tokens) is always erased, also in detector mode.
+Text flagged by other scanners (forged blocks, verdict tokens) is always erased, also in detector mode and outside
+the `max_variants` budget. When flagged text lies in no unit (for example the only sentence of the content), the
+gate cannot check it; the report counts it as `unerased` and the policy escalates the decision.
 
 ## OptionOrder
 

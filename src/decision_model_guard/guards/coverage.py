@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from ..models.base import DecisionModel, checked
-from ..scene import TRUSTED_HEADERS, parse_blocks, sentences
+from ..scene import TRUSTED_HEADERS, Block, neutralize, parse_blocks, sentences
 from ..types import GuardReport, Kind
 from ..util import argmax
 
@@ -44,9 +44,10 @@ class Coverage:
         count = self.count_tokens or getattr(model, "count_tokens", None) or _approx_tokens
         return self.max_tokens or getattr(model, "context_tokens", None), count
 
-    def windows(self, scene: str, budget: int, count: Callable[[str], int]) -> tuple[list[str], float]:
-        """Window scenes and the share of untrusted sentences they cover."""
-        blocks = parse_blocks(scene, self.trusted)
+    def windows(self, scene: str, budget: int, count: Callable[[str], int], blocks: Sequence[Block] | None = None) -> tuple[list[str], float]:
+        """Window scenes and the share of untrusted sentences they cover. `blocks` gives the trust of each block
+        (default: parse `scene`)."""
+        blocks = list(blocks) if blocks is not None else parse_blocks(scene, self.trusted)
         fixed = sum(count(scene[b.start: b.end]) for b in blocks if b.trusted) + 8 * len(blocks)
         avail = budget - fixed
         units: list[tuple[int, str, int]] = []                       # (block index, sentence, tokens)
@@ -88,19 +89,20 @@ class Coverage:
                     parts.append(scene[b.start: b.end].strip("\n"))
                 elif bi in chosen:
                     head = f"[{b.header}]\n" if b.header else ""
-                    parts.append(head + " ".join(chosen[bi]))
+                    parts.append(head + neutralize(" ".join(chosen[bi])))
             out.append("\n\n".join(parts))
         return out, covered
 
     def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind,
-              *, risky: Sequence[int] | None = None, order: Sequence[int] | None = None, fallback: int | None = None) -> GuardReport:
+              *, risky: Sequence[int] | None = None, order: Sequence[int] | None = None, fallback: int | None = None,
+              blocks: Sequence[Block] | None = None) -> GuardReport:
         budget, count = self._budget(model)
         if not budget:
             return GuardReport(self.name, False, detail={"skipped": "unknown context size: pass max_tokens"})
         n = count(scene)
         if n <= budget:
             return GuardReport(self.name, False, detail={"truncated": False, "tokens": n, "budget": budget})
-        wins, covered = self.windows(scene, budget, count)
+        wins, covered = self.windows(scene, budget, count, blocks)
         if not wins:
             return GuardReport(self.name, False, detail={"truncated": True, "tokens": n, "budget": budget, "windows": 0,
                                                          "skipped": "trusted blocks alone fill the context"})

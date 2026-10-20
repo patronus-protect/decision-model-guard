@@ -8,6 +8,32 @@ from collections.abc import Sequence
 from ..scene import TRUSTED_HEADERS, replace_spans
 from ..types import Finding, ScanResult
 
+RANGES = ((0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x2064), (0x2066, 0x2069), (0xFEFF, 0xFEFF), (0xE0000, 0xE007F), (0x00AD, 0x00AD))
+
+
+def _hidden(ch: str) -> bool:
+    o = ord(ch)
+    return any(a <= o <= b for a, b in RANGES) or (unicodedata.category(ch) in ("Cf", "Co", "Cn") and ch not in "\n\t")
+
+
+def _emoji_joiner(text: str, i: int) -> bool:
+    """U+200D between two emoji builds one emoji (family, profession): harmless."""
+    if text[i] != "\u200d":
+        return False
+    prev = text[i - 1] if i > 0 else ""
+    nxt = text[i + 1] if i + 1 < len(text) else ""
+    return bool(prev and nxt) and unicodedata.category(prev) in ("So", "Mn", "Sk") and unicodedata.category(nxt) == "So"
+
+
+def hidden_spans(text: str) -> list[tuple[int, int]]:
+    """Spans of the invisible characters InvisibleText reports."""
+    return [(i, i + 1) for i, ch in enumerate(text) if _hidden(ch) and not _emoji_joiner(text, i)]
+
+
+def visible(text: str) -> str:
+    """The text without the invisible characters InvisibleText removes (used to match flagged text across scans)."""
+    return replace_spans(text, hidden_spans(text)) if any(_hidden(ch) for ch in text) else text
+
 
 class InvisibleText:
     """Zero-width characters, bidirectional controls, Unicode tag characters and other invisible format characters.
@@ -15,26 +41,13 @@ class InvisibleText:
     They can hide instructions from human reviewers while the model still reads them. Sanitizing removes them."""
 
     name = "InvisibleText"
-    RANGES = ((0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x2064), (0x2066, 0x2069), (0xFEFF, 0xFEFF), (0xE0000, 0xE007F), (0x00AD, 0x00AD))
+    RANGES = RANGES
 
     def __init__(self, remove: bool = True):
         self.remove = remove
 
-    def _hidden(self, ch: str) -> bool:
-        o = ord(ch)
-        return any(a <= o <= b for a, b in self.RANGES) or (unicodedata.category(ch) in ("Cf", "Co", "Cn") and ch not in "\n\t")
-
-    @staticmethod
-    def _emoji_joiner(text: str, i: int) -> bool:
-        """U+200D between two emoji builds one emoji (family, profession): harmless."""
-        if text[i] != "\u200d":
-            return False
-        prev = text[i - 1] if i > 0 else ""
-        nxt = text[i + 1] if i + 1 < len(text) else ""
-        return bool(prev and nxt) and unicodedata.category(prev) in ("So", "Mn", "Sk") and unicodedata.category(nxt) == "So"
-
     def scan(self, text: str) -> ScanResult:
-        spans = [(i, i + 1) for i, ch in enumerate(text) if self._hidden(ch) and not self._emoji_joiner(text, i)]
+        spans = hidden_spans(text)
         if not spans:
             return ScanResult(self.name, text, True, 0.0)
         findings = [Finding(self.name, 1.0, f"{len(spans)} invisible character(s)", spans[0][0], spans[-1][1])]
@@ -45,11 +58,12 @@ class ForgedTrustBlock:
     """Trusted-looking structure inside untrusted content: block headers that name a trusted source, review or verdict
     stamps in square brackets, and chat role markers (system/assistant turns, [INST], <<SYS>>). A decision model may read
     them as context from the application instead of as part of the content. Speaker labels such as "Assistant:" score
-    0.6 and stay below the default threshold of 0.7 on their own."""
+    0.6 and stay below the default threshold of 0.7 on their own. A header finding covers the forged block: the header
+    line and the text up to the next header-looking line, so erasing or neutralizing it removes what the block claims."""
 
     name = "ForgedTrustBlock"
     WORDS = r"trusted|verified|security|review|system|policy|admin|approved|guardrail|moderation|classifier|verdict|audit|compliance|official|signed|freigabe|geprüft|sicherheit"
-    HEADER = re.compile(r"^[ \t]*\[([^\[\]\n]{1,100})\][ \t]*$", re.M)
+    HEADER = re.compile(r"^[ \t]*\[([^\[\]\r\n]{1,120})\][ \t]*\r?$", re.M)
     STRONG = re.compile(r"<\|(?:im_start|im_end|system|assistant|user|eot_id|start_header_id)\|>|\[/?INST\]|<<\s*/?SYS\s*>>|</?system>|"
                         r"^[ \t]*#{2,}\s*(?:system|instruction|assistant)\b|^[ \t]*(?:system|developer)\s*(?:prompt|message)?\s*:", re.I | re.M)
     WEAK = re.compile(r"^[ \t]*(?:assistant|ai|bot|moderator|reviewer)\s*:", re.I | re.M)
@@ -60,11 +74,15 @@ class ForgedTrustBlock:
 
     def scan(self, text: str) -> ScanResult:
         findings: list[Finding] = []
-        for m in self.HEADER.finditer(text):
+        heads = list(self.HEADER.finditer(text))
+        for i, m in enumerate(heads):
             h = m.group(1)
             name = h.split("|")[0].strip().upper()
             if name in self.trusted or self._words.search(h):
-                findings.append(Finding(self.name, 1.0, f"trusted-looking block header [{h.strip()}]", m.start(), m.end(), m.group(0).strip()))
+                a = m.start() + len(m.group(0)) - len(m.group(0).lstrip(" \t"))
+                b = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+                b = a + len(text[a:b].rstrip())
+                findings.append(Finding(self.name, 1.0, f"trusted-looking block header [{h.strip()}]", a, b, text[a:b]))
         for m in self.STRONG.finditer(text):
             findings.append(Finding(self.name, 1.0, "chat role marker", m.start(), m.end(), m.group(0).strip()))
         for m in self.WEAK.finditer(text):

@@ -19,15 +19,22 @@ enforces a rule instead.
 
 A scene is split into blocks. Blocks with a trusted header carry the application's own context and are never scanned
 or erased: `SYSTEM CONTEXT`, `AVAILABLE TOOLS`, `USER GOAL`, `TOOL CALL`, `PROPOSED ACTION`, `SECURITY POLICY`.
-Everything else is untrusted: the user prompt, tool output, retrieved pages, emails, text before the first header and
-blocks with unknown headers. A forged trusted header that appears after untrusted content is untrusted, except for the
-action block that follows it.
+Everything else is untrusted: the user prompt, tool output, retrieved pages, emails, blocks with unknown headers, and
+text before the first header together with everything after it. A trusted header that appears after untrusted content
+is untrusted, except a `PROPOSED ACTION` or `TOOL CALL` block that is the last block of the scene.
+
+A `Scene` built with the builder keeps the trust of every block as it was added; the pipeline uses it directly and does
+not parse the text again. The builder cleans headers (brackets, line breaks, more than 120 characters) and indents lines
+inside untrusted text that look like a header, so a user message or a tool output cannot open a block of its own. A
+plain string is parsed with the rules above, so wrap untrusted input with `Scene().user(...)`,
+`Scene().tool_output(...)` or `Scene().untrusted("EMAIL", ...)`.
 
 ## The steering gate
 
-1. Untrusted blocks are cut into units: whole blocks with unknown headers, paragraphs and windows of one to three
-   sentences. Units at the start and the end of a block come first, because appended claims sit there. The whole
-   content of a block is never one unit.
+1. Untrusted blocks are cut into units: whole blocks with unknown or trusted-looking headers, forged headers inside the
+   content together with the text after them, paragraphs and windows of one to three sentences. Units at the start and
+   the end of a block come first, because appended claims sit there. No unit holds all untrusted content of the scene,
+   because erasing all of it tells nothing; a claim behind a greeting ("Hi. Status: approved.") is still a unit.
 2. The model scores the original scene and every scene with one unit erased, in one batch.
 3. The answers are combined by decision type:
    - **risky** (`risky={...}`): the variant with the highest risk wins. If erasing a unit raises the risk, that unit was

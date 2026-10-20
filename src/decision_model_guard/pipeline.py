@@ -12,7 +12,7 @@ from .guards.steering_gate import GateOutcome, SteeringGate
 from .input_scanners.base import Scanner
 from .models.base import DecideBatch, DecisionModel, as_model, checked
 from .policy import Policy
-from .scene import CONTENT_HEADERS, TRUSTED_HEADERS, Scene, as_text, parse_blocks
+from .scene import CONTENT_HEADERS, TRUSTED_HEADERS, Block, Scene, scene_blocks
 from .types import Finding, GuardedDecision, GuardReport, Kind, ScanResult
 from .util import argmax, new_id
 
@@ -81,7 +81,7 @@ class DecisionGuard:
     # ------------------------------------------------------------------ scanning
     def scan(self, scene: str | Scene) -> tuple[str, list[ScanResult]]:
         """Scan the untrusted blocks of a scene. Returns the sanitized scene and one aggregated result per scanner."""
-        return scan_scene(as_text(scene), self.scanners, self.trusted)
+        return scan_scene(scene, self.scanners, self.trusted)
 
     # ------------------------------------------------------------------ deciding
     @staticmethod
@@ -107,14 +107,14 @@ class DecisionGuard:
             if not 0 <= idx < len(options):
                 raise ValueError(f"option index {idx} out of range")
         k = self._kind(risky, order, kind)
-        text = as_text(scene)
-        sanitized, scans = self.scan(text)
-        model_scene = sanitized if self.use_sanitized else text
+        text, blocks = scene_blocks(scene, self.trusted)
+        sanitized, sblocks, scans = _scan(text, blocks, self.scanners)
+        model_scene, model_blocks = (sanitized, sblocks) if self.use_sanitized else (text, blocks)
         q = question.rstrip() + " " + self.boundary_note if self.boundary_note else question
         hints = [f.text for s in scans if not s.valid for f in s.findings if f.text and f.source != "ClaimDetector"]
         reports: list[GuardReport] = []
         if self.gate is not None:
-            rep, outcome = self.gate.run(self.model, model_scene, q, options, k, risky, order, hints)
+            rep, outcome = self.gate.run(self.model, model_scene, q, options, k, risky, order, hints, blocks=model_blocks)
             reports.append(rep)
         else:
             p = checked(self.model, [model_scene], q, options)[0]
@@ -123,7 +123,7 @@ class DecisionGuard:
         calls = outcome.calls
         for g in self.guards:
             r = _check(g, self.model, model_scene, q, options, outcome.probs if outcome.flagged else outcome.raw, k,
-                       risky=risky, order=order, fallback=fallback, raw_probs=list(outcome.raw))
+                       risky=risky, order=order, fallback=fallback, raw_probs=list(outcome.raw), blocks=model_blocks)
             reports.append(r)
             calls += r.calls
         index, probs, action, reasons = self.policy.apply(k, outcome, scans, reports[1:] if self.gate is not None else reports,
@@ -156,43 +156,111 @@ class DecisionGuard:
         return _Guarded()
 
 
-def scan_scene(text: str, scanners: Sequence[Any], trusted_headers: Sequence[str] = TRUSTED_HEADERS) -> tuple[str, list[ScanResult]]:
-    """Run content scanners over the untrusted blocks of a scene (trusted blocks are never scanned; blocks with unknown
-    headers are scanned including the header line). Returns the sanitized scene and one aggregated result per scanner;
-    finding offsets refer to the original scene."""
+def scan_scene(scene: str | Scene, scanners: Sequence[Any], trusted_headers: Sequence[str] = TRUSTED_HEADERS) -> tuple[str, list[ScanResult]]:
+    """Run content scanners over the untrusted blocks of a scene (trusted blocks are never scanned; parsed blocks with
+    unknown headers are scanned including the header line). Each scanner sees the previous scanner's sanitized text; a
+    block is invalid for a scanner when either its sanitized or its original text is. Returns the sanitized scene and
+    one aggregated result per scanner; finding offsets refer to the original scene (None where sanitizing replaced the
+    text so that no offset exists)."""
+    text, blocks = scene_blocks(scene, trusted_headers)
+    sanitized, _, results = _scan(text, blocks, scanners)
+    return sanitized, results
+
+
+def scan_text(text: str, scanners: Sequence[Any]) -> tuple[str, list[ScanResult]]:
+    """Scan a text as one untrusted block, headers included: nothing in it is trusted. Offsets refer to `text`."""
+    sanitized, _, results = _scan(text, [Block("", 0, len(text), 0, False)], scanners)
+    return sanitized, results
+
+
+def _align(old: str, new: str) -> list[int | None]:
+    """For every character of `new`, its index in `old` (None for inserted text): common prefix and suffix, the middle
+    matched greedily as a subsequence. Sanitizers delete or replace spans, so this is exact for deletions."""
+    n = min(len(old), len(new))
+    p = 0
+    while p < n and old[p] == new[p]:
+        p += 1
+    q = 0
+    while q < n - p and old[len(old) - 1 - q] == new[len(new) - 1 - q]:
+        q += 1
+    out: list[int | None] = list(range(p))
+    i, stop = p, len(old) - q
+    for ch in new[p: len(new) - q]:
+        j = old.find(ch, i, min(stop, i + 64))
+        out.append(None if j < 0 else j)
+        i = i if j < 0 else j + 1
+    return out + list(range(stop, len(old)))
+
+
+def _map(idx: list[int | None] | None, a: int | None, b: int | None) -> tuple[int | None, int | None]:
+    if idx is None or a is None or b is None:
+        return a, b
+    s = idx[a] if a < len(idx) else None
+    e = idx[b - 1] if 0 < b <= len(idx) else None
+    return (s, e + 1) if s is not None and e is not None else (None, None)
+
+
+def _new_pos(idx: list[int | None], x: int) -> int:
+    """Position in the sanitized text of position x of the original text."""
+    return next((j for j, i in enumerate(idx) if i is not None and i >= x), len(idx))
+
+
+def _scan(text: str, blocks: Sequence[Block], scanners: Sequence[Any]) -> tuple[str, list[Block], list[ScanResult]]:
+    """scan_scene on explicit blocks; also returns the blocks moved to the offsets of the sanitized text."""
     if not scanners:
-        return text, []
+        return text, list(blocks), []
     agg: dict[str, ScanResult] = {s.name: ScanResult(s.name, "", True, 0.0) for s in scanners}
-    pieces: list[tuple[int, int, str]] = []
-    for b in parse_blocks(text, trusted_headers):
+    pieces: list[tuple[int, int, str, list[int | None]]] = []
+    for b in blocks:
         if b.trusted:
             continue
-        name = b.header.split("|")[0].strip().upper()
-        start = b.start if b.header and name not in CONTENT_HEADERS else b.body_start   # unknown headers are attacker text
+        start = b.start if b.header and b.name not in CONTENT_HEADERS and not b.builder else b.body_start   # attacker text
         body = text[start: b.end]
         stripped = body.strip("\n")
         if not stripped.strip():
             continue
         off = start + body.index(stripped[0])
-        cur = stripped
+        cur, idx = stripped, None
         for s in scanners:
             r = s.scan(cur)
-            found = r if cur == stripped else s.scan(stripped)   # findings and offsets always refer to the original text
+            orig = r if idx is None else s.scan(stripped)        # findings sanitizing would hide
             a = agg[s.name]
-            a.valid = a.valid and found.valid
-            a.score = max(a.score, found.score)
-            for f in found.findings:
+            a.valid = a.valid and r.valid and orig.valid
+            a.score = max(a.score, r.score, orig.score)
+            got = [Finding(f.source, f.score, f.message, *_map(idx, f.start, f.end), f.text) for f in r.findings]
+            if orig is not r:
+                key = lambda f: (f.start, f.end) if f.start is not None else f.message  # noqa: E731
+                seen = {key(f) for f in got}
+                got += [f for f in orig.findings if key(f) not in seen]
+            for f in got:
                 a.findings.append(Finding(f.source, f.score, f.message, None if f.start is None else f.start + off,
                                           None if f.end is None else f.end + off, f.text))
-            cur = r.sanitized
+            if r.sanitized != cur:
+                local = _align(cur, r.sanitized)
+                idx = local if idx is None else [None if k is None else idx[k] for k in local]
+                cur = r.sanitized
         if cur != stripped:
-            pieces.append((off, off + len(stripped), cur))
-    sanitized = text
-    for a, b, rep in sorted(pieces, reverse=True):
-        sanitized = sanitized[:a] + rep + sanitized[b:]
+            pieces.append((off, off + len(stripped), cur, idx or []))
+    out, pos, moved = [], 0, [Block(**vars(b)) for b in blocks]
+    for a, z, rep, _ in sorted(pieces):
+        out += [text[pos:a], rep]
+        pos = z
+    out.append(text[pos:])
+    sanitized = "".join(out)
+    if pieces:
+        def shift(x: int) -> int:
+            d = 0
+            for a, z, rep, idx in pieces:
+                if x >= z:
+                    d += len(rep) - (z - a)
+                elif x > a:
+                    return a + d + _new_pos(idx, x - a)
+            return x + d
+        for nb in moved:
+            nb.start, nb.body_start, nb.end = shift(nb.start), shift(nb.body_start), shift(nb.end)
     for r in agg.values():
         r.sanitized = sanitized
-    return sanitized, list(agg.values())
+    return sanitized, moved, list(agg.values())
 
 
 def _check(guard, *args, **ctx) -> GuardReport:

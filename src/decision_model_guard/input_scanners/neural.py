@@ -113,7 +113,8 @@ class PromptInjection:
 class ClaimDetector:
     """Claims about the decision inside the content: approvals, prior verdicts, policy references, workflow status,
     instructions to the classifier, forged review notes. Scores every unit the steering gate would erase (paragraphs and
-    windows of 1 to 3 sentences) with the claim detector of the Decision Steering Gate (mmBERT-small, 15 languages).
+    windows of 1 to 3 sentences), every single sentence and the whole text with the claim detector of the Decision
+    Steering Gate (mmBERT-small, 15 languages), and reports the smallest flagged pieces.
 
     `redact=True` removes the flagged units from the sanitized text. The gate reuses `score()` to pick what to erase.
     onnx: run an ONNX variant on ONNX Runtime instead of PyTorch ("fp32", "fp16", "mixed", "int8_int4_embeddings" or a
@@ -152,13 +153,13 @@ class ClaimDetector:
     def scan(self, text: str) -> ScanResult:
         if not text.strip():
             return ScanResult(self.name, text, True, 0.0)
-        spans = units(text, Block("USER PROMPT", 0, len(text), 0, False), self.window)
-        if not spans:
-            spans = [(0, len(text))]
+        a0 = len(text) - len(text.lstrip())
+        whole = (a0, a0 + len(text.strip()))                # every unit, every single sentence and the whole text
+        spans = list(dict.fromkeys(units(text, Block("USER PROMPT", 0, len(text), 0, False), self.window) + sentences(text) + [whole]))
         ps = self.score([text[a:b].strip() for a, b in spans])
-        flagged = sorted(((p, b - a, (a, b)) for (a, b), p in zip(spans, ps, strict=True) if p >= self.threshold), key=lambda x: (-x[0], x[1]))
+        flagged = sorted(((p, b - a, (a, b)) for (a, b), p in zip(spans, ps, strict=True) if p >= self.threshold), key=lambda x: (x[1], -x[0]))
         keep: list[tuple[float, tuple[int, int]]] = []
-        for p, _, (a, b) in flagged:                       # smallest strongest units, no overlaps
+        for p, _, (a, b) in flagged:                       # smallest flagged units first, no overlaps
             if all(b <= c or a >= d for _, (c, d) in keep):
                 keep.append((p, (a, b)))
         findings = [Finding(self.name, p, "claim about the decision", a, b, text[a:b].strip()) for p, (a, b) in sorted(keep, key=lambda x: x[1])]
