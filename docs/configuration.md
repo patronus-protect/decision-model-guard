@@ -1,6 +1,7 @@
 # Configuration
 
-`build_guard(path_or_dict, model=None)` builds a `DecisionGuard`. `dmguard init-config` writes this example:
+`build_guard(path_or_dict, model=None)` builds a `DecisionGuard`. The config covers decision models; `ExtractionGuard` is
+configured in Python. `dmguard init-config` writes this example:
 
 ```yaml
 model:
@@ -60,8 +61,9 @@ boundary_note: false                 # true appends a source-trust note to the q
 
 | type | Parameters |
 |---|---|
-| `wolf_defender_jev` | `repo` (default `patronus-studio/wolf-defender-jev`), `device`, `revision`, `max_tokens`, `max_sq`, `onnx` (with `threads`, `providers`) |
+| `wolf_defender_jev` | `repo` (default `patronus-studio/wolf-defender-jev`), `device`, `revision`, `max_tokens`, `max_sq`, `onnx` (with `threads`, `providers`), `trust_remote_code` (needed for the PyTorch path with another repository or a local folder) |
 | `systemone_http` | `url`, `model`, `headers`, `api_key_env`, `timeout`, `retries`, `concurrency`, `state_key` |
+| `clef` | `variant` (`clef` or `clef-flash`), `proxy_url`, or `account_id` with `api_token_env` (default `CLOUDFLARE_API_TOKEN`); `timeout`, `retries`, `concurrency` |
 | `openai_compatible` | `base_url`, `model`, `api_key_env`, `headers`, `timeout`, `retries`, `concurrency`, `top_logprobs`, `system_prompt` |
 | `causal_lm` | `model_id`, `device`, `dtype`, `max_tokens`, `system_prompt` |
 | `hf_classifier` | `model_id`, `option_labels`, `device`, `max_length`, `batch_size`, `subfolder` |
@@ -69,13 +71,20 @@ boundary_note: false                 # true appends a source-trust note to the q
 
 Config files are read as UTF-8. Relative paths in a config file are resolved against the folder of the file:
 `calibration`, `audit.path`, a `Conformal` guard's `calibration`, and local model folders or `.onnx` files given as
-`repo`, `model` or `onnx` (hub ids stay as they are). Unknown keys, at the top level and inside every section, are an error, and so are `block_scanners` names that are not
-among the configured scanners: a typo must not remove protection. `gate: false` disables the gate. With `selector: detector` the gate reuses a configured `ClaimDetector` scanner (or
+`repo`, `model` or `onnx` (hub ids stay as they are).
+
+Unknown keys, at the top level and inside every section, are an error, and so are `block_scanners` names that are not
+among the configured scanners: a typo must not remove protection.
+
+`gate: false` disables the gate. With `selector: detector` the gate reuses a configured `ClaimDetector` scanner (or
 creates one, taking `threshold`, `device` and `onnx` from the gate section). `PromptInjection` and `ClaimDetector` take
-`onnx` as well. `audit` takes `path`, `include_text`, `max_bytes`, `backup_count` (old files kept on rotation, default 5),
+`onnx` as well; without torch installed they use `int8_int4_embeddings`.
+
+`audit` takes `path`, `include_text`, `max_bytes`, `backup_count` (old files kept on rotation, default 5),
 `max_meta_bytes` (default 4096; larger `meta` is replaced by a note with its size) and `hash_key_env` (an environment
-variable with a secret: HMAC-SHA256 instead of plain SHA-256, so short texts cannot be confirmed by guessing). `meta`
-is written as it is, so keep customer data out of it; `server` takes `auth_token_env` and `max_body_bytes`.
+variable with a secret: HMAC-SHA256 instead of plain SHA-256, so short texts cannot be confirmed by guessing). `meta` is
+written as it is, so keep customer data out of it. `server` takes `auth_token_env`, `max_body_bytes`, `max_scene_chars`,
+`max_meta_bytes`, `request_timeout` and `docs` (see [api.md](api.md)).
 
 ## Guards
 

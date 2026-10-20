@@ -33,5 +33,5 @@ def decision_tool(guard: DecisionGuard, question: str, options: list[str], name:
         d = guard.decide(sc.user(text), question, options, **decide_kw)
         return f"{d.answer} (action: {d.action.value})"
 
-    _tool.__doc__ = f"{question} Options: {', '.join(options)}. Input: the untrusted text."
+    _tool.__doc__ = f"{question} Options: {', '.join(o.rstrip('.') for o in options)}. Input: the untrusted text."
     return tools.StructuredTool.from_function(_tool, name=name, description=_tool.__doc__)

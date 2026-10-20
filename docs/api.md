@@ -1,7 +1,7 @@
 # API server
 
 ```bash
-pip install "decision-model-guard[server,hf]"
+pip install "decision-model-guard[server,onnx]"      # or [server,hf] for the PyTorch weights; [server] alone runs no built-in model
 dmguard serve --config dmguard.yml --host 0.0.0.0 --port 8000
 ```
 

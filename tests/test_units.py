@@ -323,3 +323,21 @@ def test_conformal_skips_questions_it_was_not_calibrated_on():
     assert g.decide("[USER PROMPT]\nx", "Refund?", ["a", "b"]).action == Action.ABSTAIN
     other = g.decide("[USER PROMPT]\nx", "Which team?", ["a", "b"])
     assert other.action == Action.ALLOW and other.guards[0].detail["skipped"] == "not calibrated for this question"
+
+
+def test_repository_links_in_the_docs_point_to_files():
+    """README links into this repository and relative links between the docs must name files that exist (0.1.2 had nine
+    README links to the repository root)."""
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    bad = []
+    readme = (root / "README.md").read_text()
+    for kind, path in re.findall(r'github\.com/patronus-protect/decision-model-guard/(blob|tree)/main/([^)\s#"]*)', readme):
+        if not path or not (root / path).exists():
+            bad.append(f"README: {kind}/main/{path}")
+    for doc in (root / "docs").glob("*.md"):
+        for target in re.findall(r"\]\(([^)#\s]+)\)", doc.read_text()):
+            if "://" not in target and not (doc.parent / target).exists():
+                bad.append(f"{doc.name}: {target}")
+    assert not bad, bad

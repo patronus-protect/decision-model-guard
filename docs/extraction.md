@@ -29,13 +29,20 @@ bare model is not asked again when the guard already extracted from the same tex
 ## ExtractionGuard
 
 ```python
-from decision_model_guard import ExtractionGuard
+from decision_model_guard import ExtractionGuard, Scene
 from decision_model_guard.models import Clairic
 
 guard = ExtractionGuard.default(Clairic(), onnx="int8_int4_embeddings")      # rule scanners + claim detector
-r = guard.extract(scene, fields)                                               # fields in Clairic's format
+scene = Scene().system("Claims desk of a car insurer.").untrusted("EMAIL", email)
+r = guard.extract(scene, fields, cautious={"payout": "low"})                   # fields: see below; cautious is optional
 r.values, r.fields["payout"].action, r.fields["payout"].culprit, r.flagged
 ```
+
+Blocks the application adds as trusted (`Scene().system(...)`) are never scanned or erased. A plain string is parsed as
+a scene, so a raw email that starts with `[SYSTEM CONTEXT]` would declare itself trusted: wrap untrusted input with
+`Scene().untrusted("EMAIL", text)` (lines in it that look like a header are then indented and cannot open a block).
+Unlike `DecisionGuard`, `ExtractionGuard` never accepts an action block after untrusted content in a string. Extraction
+is a Python API; the YAML config, the CLI and the server cover decision models.
 
 1. Content scanners and the claim detector flag pieces of untrusted text; trusted blocks are never touched. Only the
    smallest flagged units are erased, so a claim does not take the facts around it along.
@@ -55,8 +62,45 @@ can move the value towards the model's prior, and with `"low"` that lower value 
 measured without `cautious`; run `evaluate_extraction(guard, cases, cautious="low")` to see how often it changes clean
 scenes on your data before you turn it on.
 
-Any model with `extract(scenes, fields) -> [{field: answer}]` works; answers use Clairic's shape (`value`, `span`,
-`median`, `p10`, `p90`, `confidence`, `p_null`). `rel_tol` (default 10 %) decides when two numbers count as equal.
+Field actions: `allow`, `cleaned`, `cautious`, `unstable`, and `unverified` when a scanner flagged text that no unit
+contains, so it could not be erased.
+
+Any model with `extract(scenes, fields) -> [{field: answer}]` works, a plain function too; it must return one dict per
+scene with a dict (or nothing) per field, otherwise `ModelOutputError` is raised. Answers use Clairic's shape (`value`,
+`span`, `median`, `p10`, `p90`, `confidence`, `p_null`).
+
+### Fields
+
+Fields use Clairic's format: `{"payout": {"type": "estimate", "instructions": "Fair payout in EUR", "min": 0, "max": 10000}}`.
+
+| Type | Request keys | Compared value |
+|---|---|---|
+| `number` | `instructions`, optional `unit` | `value` |
+| `estimate` | `instructions`, optional `min`, `max`, `unit` | `median` (else `value`) |
+| `text` | `instructions` | `value` |
+| `date` | `instructions` | `value` |
+| `list` | `instructions`, `items` (`text`, `number` or `date`); Clairic rejects a list without `items` | `value`, as a tuple |
+
+`choice` is not a Clairic type. The check "the value comes from flagged text" needs a `span` (or `spans`) in the answer;
+Clairic returns spans for text values, not for numbers and estimates, so for those the guard relies on the cleaned
+extraction. Spans refer to the scene the model read (the sanitized one by default).
+
+### Parameters
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `detector` | `None` | a unit scorer such as `ClaimDetector()`; without one, a `ClaimDetector` among the scanners is used |
+| `scanners` | `()` | content scanners whose findings are erased |
+| `threshold` | 0.3 | detector threshold |
+| `window` | 3 | longest sentence window that is erased as one unit |
+| `rel_tol` | 0.1 | numbers within this relative distance count as equal |
+| `full_check` | `False` | erase-and-check for every field |
+| `max_variants` | 24 | units erased one at a time by `cautious` and `full_check` |
+| `use_sanitized` | `True` | the model reads the sanitized scene |
+| `trusted_headers` | `TRUSTED_HEADERS` | header names that count as trusted |
+
+`ExtractionGuard.default(model, onnx=None, extra_scanners=())` adds `InvisibleText`, `ForgedTrustBlock`,
+`VerdictTokens` and the claim detector.
 
 ## Cloudflare Workers AI
 
