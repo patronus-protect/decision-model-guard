@@ -55,6 +55,7 @@ from __future__ import annotations
 import copy
 import difflib
 import importlib
+import inspect
 import os
 import sys
 import textwrap
@@ -101,11 +102,38 @@ def check_config(cfg: Any) -> dict[str, Any]:
     return cfg
 
 
-def load_config(config: dict[str, Any] | str | Path) -> dict[str, Any]:
-    """A config dict from a dict or a YAML file, checked with `check_config`."""
+def _load(config: dict[str, Any] | str | Path) -> tuple[dict[str, Any], Path | None]:
     if isinstance(config, (str, Path)):
-        config = yaml.safe_load(Path(config).read_text(encoding="utf-8-sig")) or {}
-    return check_config(copy.deepcopy(config))
+        base = Path(config).resolve().parent
+        cfg = check_config(yaml.safe_load(Path(config).read_text(encoding="utf-8-sig")) or {})
+    else:
+        base, cfg = None, check_config(copy.deepcopy(config))
+    if base is not None:                                         # relative paths in a config file mean: next to the file
+        def rel(v: Any, must_exist: bool = False) -> Any:
+            if not isinstance(v, str) or not v or os.path.isabs(v) or (must_exist and not (base / v).exists()):
+                return v
+            return str(base / v)
+        cfg["calibration"] = rel(cfg.get("calibration")) if cfg.get("calibration") else cfg.get("calibration")
+        if isinstance(cfg.get("audit"), dict) and "path" in cfg["audit"]:
+            cfg["audit"]["path"] = rel(cfg["audit"]["path"])
+        for g in cfg.get("guards", []):
+            if g.get("calibration"):
+                g["calibration"] = rel(g["calibration"])
+        for section in [cfg.get("model")] + list(cfg.get("scanners", [])) + [cfg.get("gate")]:
+            if isinstance(section, dict):                       # local model folders and .onnx files, not hub ids
+                for k in ("repo", "model", "onnx"):
+                    if k in section:
+                        section[k] = rel(section[k], must_exist=True)
+        if cfg.get("calibration") is None:
+            cfg.pop("calibration", None)
+    return cfg, base
+
+
+def load_config(config: dict[str, Any] | str | Path) -> dict[str, Any]:
+    """A config dict from a dict or a YAML file (UTF-8), checked with `check_config`. In a file, relative paths
+    (calibration, audit.path, a Conformal calibration, local model folders and .onnx files) are resolved against the
+    folder of the file."""
+    return _load(config)[0]
 
 
 def _make(where: str, cls, kw: dict[str, Any]):
@@ -115,17 +143,31 @@ def _make(where: str, cls, kw: dict[str, Any]):
         raise ValueError(f"{where}: {e}") from None
 
 
-def _import(target: str):
+def _import(target: str, base: Path | None = None):
     mod, _, attr = target.partition(":")
     if not attr:
         raise ValueError("callable target must look like 'package.module:name'")
-    if os.getcwd() not in sys.path:           # like uvicorn's --app-dir: modules next to the config resolve from the CLI too
-        sys.path.insert(0, os.getcwd())
+    for d in [os.getcwd()] + ([str(base)] if base else []):   # modules next to the config file or in the working directory
+        if d not in sys.path:
+            sys.path.insert(0, d)
     return getattr(importlib.import_module(mod), attr)
 
 
-def build_model(cfg: dict[str, Any]) -> DecisionModel:
-    """A decision model from the `model:` section."""
+def _decide_function(obj) -> bool:
+    """True when obj can be called as decide_batch(scenes, question, options)."""
+    try:
+        inspect.signature(obj).bind(None, None, None)
+        return True
+    except TypeError:
+        return False
+    except ValueError:                        # no signature (builtins): assume a decide function
+        return True
+
+
+def build_model(cfg: dict[str, Any], base: Path | None = None) -> DecisionModel:
+    """A decision model from the `model:` section. A `callable` target is a decide function, a model object, or a class or
+    factory: it is called with the remaining keys when it is a class, when keys remain, when `factory: true` is set, or
+    when it cannot take (scenes, question, options)."""
     if not isinstance(cfg, dict) or "type" not in cfg:
         raise ValueError(f"the model section needs a 'type': one of {list(MODELS)}")
     cfg = dict(cfg)
@@ -133,9 +175,9 @@ def build_model(cfg: dict[str, Any]) -> DecisionModel:
     if t == "callable":                       # your own model: a decide_batch function, or a class/factory returning a model
         if "target" not in cfg:
             raise ValueError("model type callable needs target: 'package.module:name'")
-        obj = _import(cfg.pop("target"))
-        name = cfg.pop("name", None)
-        if isinstance(obj, type) or cfg:
+        obj = _import(cfg.pop("target"), base)
+        name, factory = cfg.pop("name", None), cfg.pop("factory", None)
+        if isinstance(obj, type) or cfg or factory or (callable(obj) and not hasattr(obj, "decide_batch") and not _decide_function(obj)):
             obj = _make("model", obj, cfg)
         return as_model(obj, name=name)
     if t == "wolf_defender_jev":
@@ -168,7 +210,7 @@ def build_scanners(config: dict[str, Any] | str | Path) -> list[Any]:
 def build_guard(config: dict[str, Any] | str | Path, model: DecisionModel | None = None) -> DecisionGuard:
     """DecisionGuard from a config dict or a YAML file path. Pass `model` to override the configured model. Unknown keys
     and wrong types raise ValueError before any model is loaded."""
-    cfg = load_config(config)
+    cfg, base = _load(config)
     if model is None and "model" not in cfg:
         raise ValueError("config needs a 'model' section (or pass model=...)")
     policy = _make("policy", Policy, cfg.get("policy", {}))
@@ -208,7 +250,7 @@ def build_guard(config: dict[str, Any] | str | Path, model: DecisionModel | None
             gc["gate"] = gate
         guards.append(_make(f"guard {t}", GUARDS[t], gc))
     audit = _make("audit", AuditLogger, cfg["audit"]) if cfg.get("audit") else None
-    m = model if model is not None else build_model(cfg["model"])
+    m = model if model is not None else build_model(cfg["model"], base)
     if calibrator is not None:                                   # calibrated probabilities everywhere in the pipeline
         m = Calibrated(m, calibrator)
     return DecisionGuard(m, scanners=scanners, gate=gate, guards=guards, policy=policy, audit=audit,

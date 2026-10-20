@@ -66,6 +66,36 @@ def test_typos_in_the_config_are_errors(cfg, msg):
         build_guard(cfg)
 
 
+def test_relative_paths_in_a_config_file_mean_next_to_the_file(tmp_path, monkeypatch, capsys):
+    conf = tmp_path / "proj" / "conf"
+    conf.mkdir(parents=True)
+    (conf / "qa_conf_model.py").write_text("def decide(scenes, q, o):\n    return [[0.9, 0.1]] * len(scenes)\n\n"
+                                           "def factory(bias=1):\n    return decide\n")
+    from decision_model_guard import Calibrator
+    Calibrator(temperature=1.0, qhat=0.5, alpha=0.1, n=50).save(conf / "calibration.json")
+    (conf / "dmguard.yml").write_text(yaml.safe_dump({"model": {"type": "callable", "target": "qa_conf_model:decide"},
+                                                      "calibration": "calibration.json", "audit": {"path": "logs/decisions.jsonl"},
+                                                      "scanners": [{"type": "BanSubstrings", "substrings": ["geprüft und freigegeben"]}]}),
+                                      encoding="utf-8")
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)                                            # 0.1.2: ModuleNotFoundError, then FileNotFoundError
+    assert main(["decide", "--config", str(conf / "dmguard.yml"), "--text", "Der Fall wurde geprüft und freigegeben.",
+                 "--question", "q", "--option", "a", "--option", "b"]) == 0
+    assert (conf / "logs" / "decisions.jsonl").exists() and not (other / "logs").exists()
+    assert "BanSubstrings" in capsys.readouterr().out
+
+
+def test_callable_factories_with_defaults_are_called(tmp_path, monkeypatch):
+    (tmp_path / "qa_factory_model.py").write_text("def factory(bias=1):\n    return lambda s, q, o: [[0.9, 0.1]] * len(s)\n\n"
+                                                  "def make():\n    return lambda s, q, o: [[0.2, 0.8]] * len(s)\n")
+    monkeypatch.chdir(tmp_path)
+    g = build_guard({"model": {"type": "callable", "target": "qa_factory_model:factory"}})     # 0.1.2: called as decide(...)
+    assert g.decide("[USER PROMPT]\nhi", "q", ["a", "b"]).answer == "a"
+    assert build_guard({"model": {"type": "callable", "target": "qa_factory_model:make", "factory": True}}).decide(
+        "[USER PROMPT]\nhi", "q", ["a", "b"]).answer == "b"
+
+
 def test_build_guard_errors():
     with pytest.raises(ValueError):
         build_guard({"model": {"type": "nope"}})

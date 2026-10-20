@@ -63,9 +63,11 @@ boundary_note: false                 # true appends a source-trust note to the q
 | `openai_compatible` | `base_url`, `model`, `api_key_env`, `headers`, `timeout`, `retries`, `concurrency`, `top_logprobs`, `system_prompt` |
 | `causal_lm` | `model_id`, `device`, `dtype`, `max_tokens`, `system_prompt` |
 | `hf_classifier` | `model_id`, `option_labels`, `device`, `max_length`, `batch_size`, `subfolder` |
-| `callable` | `target: "package.module:name"` (a decide function, a model object, or a class / factory called with the remaining keys), `name` |
+| `callable` | `target: "package.module:name"`, `name`, `factory`. The target is a decide function, a model object, or a class or factory; it is called with the remaining keys when it is a class, when keys remain, when `factory: true` is set, or when it cannot take `(scenes, question, options)`. Modules are found next to the config file and in the working directory |
 
-Unknown keys, at the top level and inside every section, are an error, and so are `block_scanners` names that are not
+Config files are read as UTF-8. Relative paths in a config file are resolved against the folder of the file:
+`calibration`, `audit.path`, a `Conformal` guard's `calibration`, and local model folders or `.onnx` files given as
+`repo`, `model` or `onnx` (hub ids stay as they are). Unknown keys, at the top level and inside every section, are an error, and so are `block_scanners` names that are not
 among the configured scanners: a typo must not remove protection. `gate: false` disables the gate. With `selector: detector` the gate reuses a configured `ClaimDetector` scanner (or
 creates one, taking `threshold`, `device` and `onnx` from the gate section). `PromptInjection` and `ClaimDetector` take
 `onnx` as well. `audit` takes `path`, `include_text` and `max_bytes`; `server` takes `auth_token_env` and `max_body_bytes`.

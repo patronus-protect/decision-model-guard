@@ -25,9 +25,9 @@ def _read(args) -> str:
     if getattr(args, "text", None):
         return args.text
     if getattr(args, "file", None):
-        return Path(args.file).read_text(encoding="utf-8")
-    if not sys.stdin.isatty():
-        return sys.stdin.read()
+        return Path(args.file).read_text(encoding="utf-8-sig")
+    if not sys.stdin.isatty():                                   # UTF-8 regardless of the locale (German content on Windows)
+        return sys.stdin.buffer.read().decode("utf-8-sig") if hasattr(sys.stdin, "buffer") else sys.stdin.read()
     raise SystemExit("give --text, --file or pipe text on stdin")
 
 
@@ -108,13 +108,13 @@ def cmd_audit(args) -> int:
 
 
 def cmd_calibrate(args) -> int:
-    import yaml
-
     from .calibration import Calibrator
-    from .config import build_model
+    from .config import _load, build_model
     from .evaluate import load_cases
-    cfg = yaml.safe_load(Path(args.config).read_text())
-    model = build_model(cfg["model"])                             # the bare model: calibration is fitted on raw probabilities
+    cfg, base = _load(args.config)
+    if "model" not in cfg:
+        raise ValueError("config needs a 'model' section")
+    model = build_model(cfg["model"], base)                       # the bare model: calibration is fitted on raw probabilities
     cal = Calibrator.fit(model, load_cases(args.cases), alpha=args.alpha)
     print(cal.summary())
     if args.test and cal.qhat is not None:
