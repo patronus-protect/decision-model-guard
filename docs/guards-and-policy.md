@@ -13,6 +13,7 @@
 | `mode` | `"erase"` | `"trigger"`: any flagged unit starts the full check, otherwise one call |
 | `override` | 0.5 | risky decisions: a variant replaces the original only with at least this risk (`rule="absolute"`) |
 | `rule` | `"absolute"` | `"delta"`: risk at least `delta` above the original; `"gap"`: at least `delta` above the median variant |
+| `max_chars` | 400,000 | characters sent to the model per decision (scene x (1 + variants)); a longer scene gets fewer variants, detector-flagged units first, and the reasons say how many units were checked; `None` turns the cap off |
 | `seed` | 0 | sampling seed (decisions are deterministic) |
 
 Text flagged by other scanners (forged blocks, verdict tokens) is always erased, also in detector mode and outside

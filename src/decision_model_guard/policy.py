@@ -99,6 +99,8 @@ class Policy:
                     raise_to(Action.CAUTIOUS)
                 else:
                     raise_to(Action.ESCALATE)
+        if gate.skipped:                                 # informational: the full check did not cover every unit
+            reasons.append(f"steering gate: {gate.units - gate.skipped} of {gate.units} units checked (variant budget)")
         if gate.unerased:                                # flagged text the gate found no unit for: nothing was checked
             reasons.append(f"content scanners: {gate.unerased} flagged piece(s) could not be erased")
             raise_to(Action.ESCALATE)

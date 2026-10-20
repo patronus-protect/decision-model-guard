@@ -356,6 +356,8 @@ Apple M4 CPU, Wolf Defender Jev, `DecisionGuard.default`, median of 15 runs:
 
 On PyTorch the claim detector alone takes about 18 ms for one piece of text and 84 ms for a five-sentence ticket (9 pieces in one batch). Long scenes (thousands of tokens) run slower on ONNX Runtime than on PyTorch on this CPU; measure on your hardware.
 
+These numbers are for short inputs. Every variant of the steering gate is one more call on the whole scene, so a full check costs about the scene length times the number of variants, and `Coverage` adds one call per window. `SteeringGate(max_chars=400_000)` caps the characters sent per decision: a long scene gets fewer variants (the claim detector's flagged units first) and the reasons say how many units were checked. The claim detector scores each unit once per decision. The server rejects scenes longer than `server.max_scene_chars` (100,000 characters by default) and answers 504 after `server.request_timeout`.
+
 ## Limits
 
 - Decision Model Guard protects the decision, not the action that follows. Payments, data access and other critical steps still need their own permission checks.

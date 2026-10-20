@@ -19,7 +19,8 @@ where a sanitizer replaced text so that no offset exists, they are `None`.
 | `TokenLimit(limit=4096, tokenizer=None, truncate=True)` | | truncation keeps head and tail |
 
 Transformer models are loaded once per process and shared, so the `ClaimDetector` scanner and the gate's detector use
-the same weights.
+the same weights. `ClaimDetector` keeps the last `cache_size=4096` scores, so a unit that the scanner and the gate both
+look at is scored once.
 
 ```python
 from decision_model_guard import scan_content

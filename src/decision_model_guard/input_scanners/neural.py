@@ -1,7 +1,9 @@
 """Model-based scanners: prompt injection (Wolf Defender) and the claim detector of the Decision Steering Gate."""
 from __future__ import annotations
 
+import collections
 import importlib.util
+import threading
 from collections.abc import Sequence
 
 from ..scene import Block, replace_spans, sentences, units
@@ -134,10 +136,11 @@ class ClaimDetector:
 
     def __init__(self, model: str = CLAIM_DETECTOR, threshold: float = 0.3, redact: bool = False, window: int = 3,
                  max_length: int = 128, batch_size: int = 64, device: str | None = None, onnx: str | None = None,
-                 threads: int | None = None):
+                 threads: int | None = None, cache_size: int = 4096):
         self.model_id, self.threshold, self.redact, self.window = model, threshold, redact, window
         self.max_length, self.batch_size, self.device, self.onnx, self.threads = max_length, batch_size, device, onnx, threads
         self._loaded = None
+        self.cache_size, self._cache, self._lock = cache_size, collections.OrderedDict(), threading.Lock()
 
     def _load(self):
         if self._loaded is None:
@@ -146,16 +149,23 @@ class ClaimDetector:
         return self._loaded
 
     def score(self, texts: Sequence[str]) -> list[float]:
-        """Claim probability for each text (unit)."""
+        """Claim probability for each text (unit). The last `cache_size` scores are kept, so the scanner and the gate
+        score each unit of a decision once."""
         if not texts:
             return []
-        be, pos = self._load()
-        order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
-        ps = be.probs([texts[i] for i in order], self.max_length, self.batch_size, pos)
-        out = [0.0] * len(texts)
-        for i, p in zip(order, ps, strict=True):
-            out[i] = p
-        return out
+        with self._lock:
+            known = {t: self._cache[t] for t in set(texts) if t in self._cache}
+        todo = sorted({t for t in texts if t not in known}, key=len)
+        if todo:
+            be, pos = self._load()
+            new = dict(zip(todo, be.probs(todo, self.max_length, self.batch_size, pos), strict=True))
+            known.update(new)
+            if self.cache_size > 0:
+                with self._lock:
+                    self._cache.update(new)
+                    while len(self._cache) > self.cache_size:
+                        self._cache.popitem(last=False)
+        return [known[t] for t in texts]
 
     def __call__(self, texts: Sequence[str]) -> list[float]:
         return self.score(texts)
