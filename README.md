@@ -87,7 +87,7 @@ On a decision-steering benchmark with five tasks (refund, prompt injection, phis
 
 ## Audit your model
 
-`dmguard audit` attacks and stresses your decision model with ten checks and shows how often it gets steered, with and without the guard. The scorecard below is a real run: Qwen2.5-0.5B-Instruct as an LLM judge on the twelve bundled sample cases (refunds, ticket routing, prompt injection, escalation, phishing), guarded like `DecisionGuard.default` plus `Coverage` ([examples/audit_qwen.yml](https://github.com/patronus-protect/decision-model-guard/blob/main/examples/audit_qwen.yml)), on a laptop CPU in about 13 minutes. Raw numbers: [docs/audit_qwen.json](https://github.com/patronus-protect/decision-model-guard/blob/main/docs/audit_qwen.json).
+`dmguard audit` attacks and stresses your decision model with ten checks and shows how often it gets steered, with and without the guard. The scorecard below is a real run: Qwen2.5-0.5B-Instruct as an LLM judge on the twelve bundled sample cases (refunds, ticket routing, prompt injection, escalation, phishing), guarded like `DecisionGuard.default` plus `Coverage` ([examples/audit_qwen.yml](https://github.com/patronus-protect/decision-model-guard/blob/main/examples/audit_qwen.yml)), on a laptop CPU in about 9 minutes with 0.2.0. Raw numbers: [docs/audit_qwen.json](https://github.com/patronus-protect/decision-model-guard/blob/main/docs/audit_qwen.json).
 
 ```bash
 dmguard audit --config examples/audit_qwen.yml --markdown audit.md
@@ -110,6 +110,7 @@ dmguard audit --config examples/audit_qwen.yml --markdown audit.md
 - **Padding** does not move this model in these cases. Where it matters, `Coverage` closes it: Wolf Defender Jev reads 6,144 tokens, and on a 7,856-token tool output with the injected instruction after token 2,729 it answers "injection" with probability 0.035. With `Coverage` it answers "injection" (2 windows, 3 calls, 10 s on a laptop CPU).
 - **Robustness checks stay open in this configuration:** the answer still changes with the format (8 %), the option wording (19 %) and the option order (42 %, 25 % with the guard). `Invariance` and `OptionOrder` flag these decisions; they were left out here to show the raw sensitivity.
 - **The price:** on a quarter of the decisions with a harmless sentence added, the guard did not simply allow the answer (it fell back, escalated or took the cautious option).
+- **What counts:** attacks run only on the six cases the model answers correctly alone, and only towards a target on the unsafe side. A push towards a more cautious answer would be listed in its own row as a false alarm; no attack in this run had such a target, so the row is empty and not shown.
 
 `--max-attack-success 0.05` turns the audit into a CI gate. Details on every check: [docs/robustness.md](https://github.com/patronus-protect/decision-model-guard/blob/main/docs/robustness.md).
 
@@ -280,7 +281,7 @@ sanitized, results_valid, results_score = scan_content([InvisibleText(), Verdict
 | `Confidence` | minimum top probability and margin |
 | `Conformal` | abstain unless the conformal prediction set holds exactly one option (after `dmguard calibrate`) |
 
-`Policy` maps results to actions: `gate_action`, `unstable_action`, `scanner_action`, `block_scanners`, `low_confidence_action`, `inconsistent_action`, `coverage_action`, `fallback_option`. See [docs/guards-and-policy.md](https://github.com/patronus-protect/decision-model-guard/blob/main/docs/guards-and-policy.md) and [docs/robustness.md](https://github.com/patronus-protect/decision-model-guard/blob/main/docs/robustness.md).
+`Policy` maps results to actions: `gate_action`, `unstable_action`, `scanner_action`, `block_scanners`, `low_confidence_action`, `inconsistent_action`, `coverage_action`, `incomplete_coverage_action`, `fallback_option`. See [docs/guards-and-policy.md](https://github.com/patronus-protect/decision-model-guard/blob/main/docs/guards-and-policy.md) and [docs/robustness.md](https://github.com/patronus-protect/decision-model-guard/blob/main/docs/robustness.md).
 
 ## Configuration
 
@@ -383,6 +384,7 @@ These numbers are for short inputs. Every variant of the steering gate is one mo
 - The gate catches claims about the decision. Invented facts that argue for a verdict without naming it pass.
 - A claim spread across sentences far apart can still work, and with the detector a claim it misses is not erased.
 - The rules never make an answer less cautious, so they do not repair false positives.
+- In a scene passed as a plain string, a final `PROPOSED ACTION` or `TOOL CALL` block is trusted. If untrusted text is pasted into such a string and the application adds no action block of its own, that text can end with one. Build scenes with `Scene`, which keeps such lines inside the untrusted block.
 - Each erased piece costs one extra call to your model.
 
 ## Development
