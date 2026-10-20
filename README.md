@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/decision-model-guard/"><img alt="PyPI" src="https://img.shields.io/pypi/v/decision-model-guard?color=2a78d6"></a>
   <a href="https://github.com/patronus-protect/decision-model-guard/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/patronus-protect/decision-model-guard/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-2a78d6">
   <a href="https://github.com/patronus-protect/decision-model-guard/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2a78d6"></a>
@@ -26,7 +27,7 @@ It is to decision models what [LLM Guard](https://github.com/protectai/llm-guard
 <sub>This is a recorded run: Qwen2.5-0.5B-Instruct calls a phishing email legitimate because of one planted sentence. The claim detector flags it, the gate erases one piece of the email at a time, asks the model again and keeps the highest risk. Every number comes from <a href="https://github.com/patronus-protect/decision-model-guard/blob/main/assets/demo_run.json"><code>assets/demo_run.json</code></a>; <a href="https://github.com/patronus-protect/decision-model-guard/blob/main/scripts/readme_assets.py"><code>scripts/readme_assets.py</code></a> records the run and renders the animation.</sub>
 
 ```bash
-pip install "decision-model-guard[onnx] @ git+https://github.com/patronus-protect/decision-model-guard"
+pip install "decision-model-guard[onnx]"
 ```
 
 ```python
@@ -149,12 +150,6 @@ pip install "decision-model-guard[onnx]"        # the models on ONNX Runtime, no
 pip install "decision-model-guard[hf]"          # the same models on PyTorch and transformers
 pip install "decision-model-guard[server]"      # HTTP API
 pip install "decision-model-guard[all]"         # everything
-```
-
-Until the first PyPI release, install from GitHub:
-
-```bash
-pip install "decision-model-guard[onnx] @ git+https://github.com/patronus-protect/decision-model-guard"
 ```
 
 From a checkout: `pip install -e ".[dev]"`. Python 3.10 or newer.
