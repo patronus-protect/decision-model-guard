@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 (2026-10-20)
+
+- Extraction measurements on Cloudflare's Clairic back in the README and the docs.
+
 ## 0.1.1 (2026-10-20)
 
 - Documentation and examples updated; the README installs from PyPI.
