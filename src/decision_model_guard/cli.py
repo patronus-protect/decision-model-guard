@@ -87,9 +87,8 @@ def cmd_audit(args) -> int:
     if args.markdown:
         Path(args.markdown).write_text(md, encoding="utf-8")
     if args.max_attack_success is not None:                       # for CI: fail when an attack gets through too often
-        key = "raw" if args.no_guard else "guarded"
-        worst = {k: v.rates()[key] for k, v in rep.families.items() if v.kind == "attack" and v.n}
-        over = {k: r for k, r in worst.items() if r is not None and r > args.max_attack_success}
+        worst = rep.attack_rates(guarded=not args.no_guard)
+        over = {k: r for k, r in worst.items() if r > args.max_attack_success}
         if over:
             print("attack success above the limit: " + ", ".join(f"{k} {100 * r:.1f} %" for k, r in over.items()), file=sys.stderr)
             return 2

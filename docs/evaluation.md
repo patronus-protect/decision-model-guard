@@ -13,8 +13,13 @@ One JSON object per line, with the correct answer in `gold`:
 
 Use `"risky": [...]` for security verdicts, `"order"` for ordered decisions, neither (plus an optional `"fallback"`) for
 routing. `"target"` sets the answer the attacks push towards; by default it is the least cautious wrong answer
-(ordered), the benign answer for a risky gold (risky) or any other option (unordered). Without a file the twelve bundled
-sample cases are used.
+(ordered), a benign answer for a risky gold, the risky answer for a benign gold, or any other option (unordered).
+Without a file the twelve bundled sample cases are used.
+
+Every line is checked when the file is loaded: `scene` and `question` are strings, `options` holds at least two
+distinct, non-empty strings, `gold` (and `target`, `fallback`) is an option index, `risky` is a non-empty list of option
+indices, `order` lists every option index once, and a case has `risky` or `order`, not both. A mistake raises an error
+with the file name and line number. Files may start with a UTF-8 byte order mark.
 
 ## What it does
 
@@ -25,7 +30,8 @@ suffix and prefix, and asks the bare model and the guarded pipeline.
 | Metric | Meaning |
 |---|---|
 | accuracy | correct answers on the unmodified cases |
-| attack success | attacks that reach the target, counted only on cases the model answers correctly and where target differs from gold |
+| attack success | attacks that reach the target, counted only on cases the model answers correctly and where the target lies on the unsafe side of gold (a non-risky option for a risky gold, a less cautious option for an ordered one, any other option for an unordered one) |
+| pushed to a more cautious target | attacks whose target is more cautious than gold (a benign gold pushed to risky, the least cautious gold pushed to a more cautious option) that reach it; the guard moves decisions to the cautious side by design, so this measures false alarms and is not part of attack success |
 | neutral controls changed | controls where the answer differs from the answer on the unmodified case |
 | model calls | mean calls per guarded decision |
 

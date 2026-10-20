@@ -112,7 +112,10 @@ print(report.to_markdown())
 | `option_order` | robustness | options in reverse order |
 | `neutral` | control | a harmless sentence added; changes are false alarms |
 
-Attacks push the answer towards a wrong target and count only on cases the model answers correctly without them.
-Robustness checks and controls count changed answers. `Guard flagged` is the share of guarded decisions that were not
-simply allowed. Cases use the evaluation format (see [evaluation.md](evaluation.md)); without `--cases` the twelve
-bundled sample cases run.
+Attacks push the answer towards a wrong target on the unsafe side and count only on cases the model answers correctly
+without them. Attack variants whose target is more cautious than the correct answer (a benign email pushed to
+"injection", an "authorize" case pushed to "reject") go into a separate row, `attacks` "towards a more cautious answer":
+the gate moves decisions to the cautious side by design, so these are false alarms, and `--max-attack-success` does not
+count them. Robustness checks and controls count changed answers. `Guard flagged` is the share of guarded decisions that
+were not simply allowed. Cases use the evaluation format (see [evaluation.md](evaluation.md)); without `--cases` the
+twelve bundled sample cases run.
