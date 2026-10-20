@@ -1,4 +1,4 @@
-"""Command line: dmguard {version, init-config, scan, decide, eval, serve}."""
+"""Command line: dmguard {version, init-config, scan, decide, eval, audit, calibrate, serve}."""
 from __future__ import annotations
 
 import argparse
@@ -76,6 +76,46 @@ def cmd_eval(args) -> int:
     return 0
 
 
+def cmd_audit(args) -> int:
+    from .evaluate import FAMILIES, audit, load_cases
+    g = _guard(args)
+    rep = audit(g.model, load_cases(args.cases), guard=None if args.no_guard else g, families=args.check or list(FAMILIES),
+                per_case=args.per_case, padding_tokens=args.padding_tokens, seed=args.seed)
+    md = rep.to_markdown()
+    print(md)
+    if args.out:
+        Path(args.out).write_text(json.dumps(rep.to_dict(), indent=2), encoding="utf-8")
+    if args.markdown:
+        Path(args.markdown).write_text(md, encoding="utf-8")
+    if args.max_attack_success is not None:                       # for CI: fail when an attack gets through too often
+        key = "raw" if args.no_guard else "guarded"
+        worst = {k: v.rates()[key] for k, v in rep.families.items() if v.kind == "attack" and v.n}
+        over = {k: r for k, r in worst.items() if r is not None and r > args.max_attack_success}
+        if over:
+            print("attack success above the limit: " + ", ".join(f"{k} {100 * r:.1f} %" for k, r in over.items()), file=sys.stderr)
+            return 2
+    return 0
+
+
+def cmd_calibrate(args) -> int:
+    import yaml
+
+    from .calibration import Calibrator
+    from .config import build_model
+    from .evaluate import load_cases
+    cfg = yaml.safe_load(Path(args.config).read_text())
+    model = build_model(cfg["model"])                             # the bare model: calibration is fitted on raw probabilities
+    cal = Calibrator.fit(model, load_cases(args.cases), alpha=args.alpha)
+    print(cal.summary())
+    if args.test:
+        ev = cal.evaluate(model, load_cases(args.test))
+        print(f"Held-out: coverage {100 * ev['coverage']:.1f} % (target {100 * (1 - args.alpha):.0f} %), "
+              f"{100 * ev['singleton_rate']:.1f} % single answers, accuracy of single answers {100 * ev['singleton_accuracy']:.1f} %")
+    cal.save(args.out)
+    print(f"wrote {args.out}")
+    return 0
+
+
 def cmd_serve(args) -> int:
     from .server import create_app
     from .util import require
@@ -91,7 +131,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("init-config", help="write an example config")
     p.add_argument("path", nargs="?", default="dmguard.yml")
     p.add_argument("--force", action="store_true")
-    for name, helptext in (("scan", "scan untrusted text"), ("decide", "one guarded decision"), ("eval", "steering evaluation"), ("serve", "HTTP API")):
+    for name, helptext in (("scan", "scan untrusted text"), ("decide", "one guarded decision"), ("eval", "steering evaluation"),
+                           ("audit", "robustness audit: attacks and stress checks, with and without the guard"),
+                           ("calibrate", "fit temperature and conformal threshold on labelled cases"), ("serve", "HTTP API")):
         q = sub.add_parser(name, help=helptext)
         q.add_argument("--config", required=True)
         if name in ("scan", "decide"):
@@ -113,6 +155,21 @@ def main(argv: list[str] | None = None) -> int:
             q.add_argument("--lang", action="append")
             q.add_argument("--seed", type=int, default=0)
             q.add_argument("--out", help="write the report as JSON")
+        if name == "audit":
+            q.add_argument("--cases", help="JSONL cases (default: bundled samples)")
+            q.add_argument("--check", action="append", help="run only these checks (repeatable)")
+            q.add_argument("--per-case", type=int, default=2, help="variants per check and case")
+            q.add_argument("--padding-tokens", type=int, help="filler per side for the padding check (default: 1.2 x model context)")
+            q.add_argument("--no-guard", action="store_true", help="measure the model alone")
+            q.add_argument("--seed", type=int, default=0)
+            q.add_argument("--out", help="write the report as JSON")
+            q.add_argument("--markdown", help="write the scorecard as Markdown")
+            q.add_argument("--max-attack-success", type=float, help="exit 2 when an attack check exceeds this rate (CI)")
+        if name == "calibrate":
+            q.add_argument("--cases", required=True, help="labelled JSONL cases for fitting")
+            q.add_argument("--test", help="labelled JSONL cases to check coverage on")
+            q.add_argument("--alpha", type=float, default=0.1, help="allowed miss rate of the conformal sets")
+            q.add_argument("--out", default="calibration.json")
         if name == "serve":
             q.add_argument("--host", default="127.0.0.1")
             q.add_argument("--port", type=int, default=8000)
@@ -121,7 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "version":
         print(__version__)
         return 0
-    return {"init-config": cmd_init, "scan": cmd_scan, "decide": cmd_decide, "eval": cmd_eval, "serve": cmd_serve}[args.cmd](args)
+    return {"init-config": cmd_init, "scan": cmd_scan, "decide": cmd_decide, "eval": cmd_eval, "audit": cmd_audit,
+            "calibrate": cmd_calibrate, "serve": cmd_serve}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,22 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal example
+      description: Scene, question, options, model and configuration. Remove anything confidential.
+      render: python
+  - type: input
+    id: version
+    attributes:
+      label: Versions
+      description: "Output of: dmguard version; python --version; and onnxruntime / torch versions if relevant"

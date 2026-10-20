@@ -24,6 +24,10 @@ class CausalLMJudge:
         dtype = dtype or ("float32" if self.device == "cpu" else "bfloat16")   # bf16 is emulated and slow on Apple CPUs
         self.model = tf.AutoModelForCausalLM.from_pretrained(model_id, dtype=getattr(torch, dtype)).to(self.device).eval()
         self.max_tokens, self.system = max_tokens, system_prompt or self.SYSTEM
+        self.context_tokens = max_tokens                         # longer scenes keep their last max_tokens tokens
+
+    def count_tokens(self, text: str) -> int:
+        return len(self.tok.encode(text, add_special_tokens=False))
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
         import torch
@@ -58,6 +62,10 @@ class HFClassifier:
         self.model = tf.AutoModelForSequenceClassification.from_pretrained(model_id, **kw).to(self.device).eval()
         self.option_labels = list(option_labels) if option_labels is not None else None
         self.max_length, self.batch_size = max_length, batch_size
+        self.context_tokens = max_length - 2                     # longer scenes keep their first tokens
+
+    def count_tokens(self, text: str) -> int:
+        return len(self.tok.encode(text, add_special_tokens=False))
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
         import torch

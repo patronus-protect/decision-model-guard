@@ -36,6 +36,10 @@ class WolfDefenderJev:
     def __init__(self, model, max_tokens: int = 8192, max_sq: int = 8_000_000):
         self.model, self.max_tokens, self.max_sq = model, max_tokens, max_sq
         self._cache: dict[tuple[str, ...], object] = {}
+        self.context_tokens = model.max_case                     # longer scenes keep the first third and the last two thirds
+
+    def count_tokens(self, text: str) -> int:
+        return len(self.model.tokenizer(text, add_special_tokens=False)["input_ids"])
 
     @classmethod
     def from_pretrained(cls, repo_or_path: str = REPO, device: str | None = None, revision: str | None = None, onnx: str | None = None,
@@ -124,6 +128,10 @@ class WolfDefenderJevONNX:
         self.session, self.tok, self.bos, self.eos = session, tokenizer, bos, eos
         self.max_case, self.max_q, self.max_opt = max_case_tokens, max_question_tokens, max_option_tokens
         self.max_tokens, self.max_sq = max_tokens, max_sq
+        self.context_tokens = max_case_tokens
+
+    def count_tokens(self, text: str) -> int:
+        return len(self.tok.encode(text, add_special_tokens=False).ids)
 
     @classmethod
     def from_pretrained(cls, repo_or_path: str = REPO, variant: str = "int8_int4_embeddings", revision: str | None = None,

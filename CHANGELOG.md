@@ -18,3 +18,12 @@ First release.
 - ONNX Runtime backend without torch (`onnx` extra): `WolfDefenderJev.from_pretrained(onnx=...)` / `WolfDefenderJevONNX`,
   `ClaimDetector(onnx=...)`, `PromptInjection(onnx=...)`, `DecisionGuard.default(onnx=...)` and the `onnx` key in the
   config, for the four variants of the Patronus models or your own `.onnx` file.
+- `Coverage` guard: scenes longer than the model's context are checked window by window and combined with the gate's
+  rules; the built-in adapters expose `context_tokens` and `count_tokens`.
+- `Invariance` guard: flags answers that change with the scene format (markdown, key-value, JSON, compact), reworded
+  options or alternative questions.
+- Calibration: `Calibrator` (temperature scaling, split-conformal threshold, risk thresholds for target false-positive
+  rates), `Calibrated` model wrapper, `Conformal` guard, `dmguard calibrate`.
+- Robustness audit: `decision_model_guard.evaluate.audit` and `dmguard audit` with ten checks (claim, split claim, forged
+  block, verdict token, look-alike letters, padding, format, option wording, option order, neutral controls), a
+  scorecard with and without the guard, and `--max-attack-success` for CI.

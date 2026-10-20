@@ -18,10 +18,16 @@
       scope: unordered                   # all | unordered
       threshold: 0.3
     guards:
+      - type: Coverage                   # long content: check the parts the model would cut off, window by window
+      - type: Invariance                 # same scene as markdown, shorter option wording: the answer must not change
+        formats: [markdown]
+        option_transforms: [short]
       - type: Confidence
         min_confidence: 0.55
       - type: OptionOrder
         permutations: reverse
+      # - type: Conformal                # abstain unless the conformal set has one option (dmguard calibrate)
+    # calibration: calibration.json      # temperature + conformal threshold from your labelled cases
     policy:
       unstable_action: fallback
       scanner_action: report
@@ -46,14 +52,15 @@ import yaml
 
 from . import input_scanners as S
 from .audit import AuditLogger
-from .guards import Confidence, OptionOrder, SteeringGate
+from .calibration import Calibrated, Calibrator
+from .guards import Confidence, Conformal, Coverage, Invariance, OptionOrder, SteeringGate
 from .models import CausalLMJudge, DecisionModel, HFClassifier, OpenAICompatible, SystemOneHTTP, WolfDefenderJev, as_model
 from .pipeline import DecisionGuard
 from .policy import Policy
 
 SCANNERS = {c.__name__: c for c in (S.InvisibleText, S.ForgedTrustBlock, S.VerdictTokens, S.Regex, S.BanSubstrings, S.TokenLimit,
                                      S.PromptInjection, S.ClaimDetector)}
-GUARDS = {"Confidence": Confidence, "OptionOrder": OptionOrder}
+GUARDS = {"Confidence": Confidence, "OptionOrder": OptionOrder, "Coverage": Coverage, "Invariance": Invariance, "Conformal": Conformal}
 
 
 def _import(target: str):
@@ -103,6 +110,9 @@ def build_guard(config: dict[str, Any] | str | Path, model: DecisionModel | None
     m = model if model is not None else build_model(cfg["model"]) if "model" in cfg else None
     if m is None:
         raise ValueError("config needs a 'model' section (or pass model=...)")
+    calibrator = Calibrator.load(cfg["calibration"]) if cfg.get("calibration") else None
+    if calibrator is not None:                                   # calibrated probabilities everywhere in the pipeline
+        m = Calibrated(m, calibrator)
     scanners = [build_scanner(s) for s in cfg.get("scanners", [])]
     gate = None
     if cfg.get("gate") is not False:
@@ -122,6 +132,13 @@ def build_guard(config: dict[str, Any] | str | Path, model: DecisionModel | None
         t = gc.pop("type")
         if t not in GUARDS:
             raise ValueError(f"unknown guard {t!r}; available: {sorted(GUARDS)}")
+        if t == "Conformal":
+            src = gc.pop("calibration", None)
+            if src is None and calibrator is None:
+                raise ValueError("Conformal needs 'calibration: path.json' (on the guard or at the top level)")
+            gc["calibrator"] = Calibrator.load(src) if src else calibrator
+        if t == "Coverage" and gc.get("gate") is True:            # erase-and-check inside every window with the configured gate
+            gc["gate"] = gate
         guards.append(GUARDS[t](**gc))
     policy = Policy(**cfg.get("policy", {}))
     audit = AuditLogger(**cfg["audit"]) if cfg.get("audit") else None

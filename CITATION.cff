@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use Decision Model Guard in your work, please cite it as below."
+title: "Decision Model Guard: guardrails for decision models"
+type: software
+authors:
+  - name: "Patronus Protect"
+    website: "https://patronus.studio"
+repository-code: "https://github.com/patronus-protect/decision-model-guard"
+url: "https://github.com/patronus-protect/decision-model-guard"
+license: MIT
+version: 0.1.0
+date-released: 2026-10-20
+abstract: >-
+  Decision Model Guard protects decision models (Jev-like models, classifiers and LLM judges) from text inside the
+  content that steers their answer. It scans untrusted content, runs an erase-and-check steering gate around any
+  decision model, checks long content window by window, flags answers that change with the input format or the option
+  wording, abstains with conformal coverage guarantees, and audits a model's robustness with and without the guard.
+keywords:
+  - decision models
+  - guardrails
+  - prompt injection
+  - decision steering
+  - LLM judge
+  - AI security
+  - conformal prediction

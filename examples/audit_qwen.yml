@@ -1,0 +1,20 @@
+# The audit in the README: Qwen2.5-0.5B-Instruct as an LLM judge, guarded like DecisionGuard.default plus Coverage.
+#   pip install "decision-model-guard[hf,onnx]"
+#   dmguard audit --config examples/audit_qwen.yml --markdown audit.md
+model:
+  type: causal_lm
+  model_id: Qwen/Qwen2.5-0.5B-Instruct
+  device: cpu
+scanners:
+  - type: InvisibleText
+  - type: ForgedTrustBlock
+  - type: VerdictTokens
+  - type: ClaimDetector
+    threshold: 0.3
+    onnx: int8_int4_embeddings
+gate:
+  selector: detector
+  scope: unordered
+  threshold: 0.3
+guards:
+  - type: Coverage

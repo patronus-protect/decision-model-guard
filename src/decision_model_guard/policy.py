@@ -20,8 +20,12 @@ class Policy:
     scanner_action:       a content scanner failed: "report", "escalate", "cautious" (most cautious option) or "block"
     block_scanners:       scanners whose failure always blocks, e.g. ["PromptInjection"]
     low_confidence_action: Confidence guard triggered: "abstain" or "escalate"
-    inconsistent_action:  OptionOrder guard triggered: "escalate" or "report"
-    fallback_option:      default fallback option index for unordered decisions (a per-decision fallback wins)"""
+    inconsistent_action:  OptionOrder or Invariance guard triggered: "escalate" or "report"
+    coverage_action:      Coverage guard found a window of long content that moves the decision: "apply" (risky/ordered:
+                          take the window's more cautious answer; unordered: fallback), "escalate" or "report"
+    fallback_option:      default fallback option index for unordered decisions (a per-decision fallback wins)
+
+    Confidence and Conformal guards use low_confidence_action."""
 
     gate_action: str = "apply"
     unstable_action: str = "fallback"
@@ -29,12 +33,13 @@ class Policy:
     block_scanners: Sequence[str] = ()
     low_confidence_action: str = "abstain"
     inconsistent_action: str = "escalate"
+    coverage_action: str = "apply"
     fallback_option: int | None = None
 
     def __post_init__(self):
         checks = {"gate_action": ("apply", "escalate", "report"), "unstable_action": ("fallback", "escalate", "keep"),
                   "scanner_action": ("report", "escalate", "cautious", "block"), "low_confidence_action": ("abstain", "escalate"),
-                  "inconsistent_action": ("escalate", "report")}
+                  "inconsistent_action": ("escalate", "report"), "coverage_action": ("apply", "escalate", "report")}
         for k, allowed in checks.items():
             if getattr(self, k) not in allowed:
                 raise ValueError(f"{k} must be one of {allowed}")
@@ -90,9 +95,30 @@ class Policy:
                 else:
                     raise_to(Action.ESCALATE)
         for g in guards:
+            if g.guard == "Coverage" and g.detail.get("truncated") and not g.triggered:
+                reasons.append(f"long content: {g.detail.get('windows', 0)} windows checked, none moves the decision")
             if not g.triggered:
                 continue
-            if g.guard == "Confidence":
+            if g.guard == "Coverage":
+                reasons.append(f"long content: window {g.detail.get('window')} of {g.detail.get('windows')} moves the decision")
+                if self.coverage_action == "report" or index is None:
+                    continue
+                if kind in (Kind.RISKY, Kind.ORDERED) and "guarded_index" in g.detail:
+                    index, probs = g.detail["guarded_index"], list(g.detail["guarded_probs"])
+                    raise_to(Action.CAUTIOUS if self.coverage_action == "apply" else Action.ESCALATE)
+                elif self.coverage_action == "apply" and fb is not None:
+                    index = fb
+                    raise_to(Action.FALLBACK)
+                else:
+                    raise_to(Action.ESCALATE)
+            elif g.guard == "Invariance":
+                reasons.append(f"answer changes under {', '.join(g.detail.get('changed_under', []))}")
+                if self.inconsistent_action == "escalate":
+                    raise_to(Action.ESCALATE)
+            elif g.guard == "Conformal":
+                reasons.append(f"conformal set at {100 * g.detail.get('coverage', 0):.0f} % coverage: {g.detail.get('set')}")
+                raise_to(Action.ABSTAIN if self.low_confidence_action == "abstain" else Action.ESCALATE)
+            elif g.guard == "Confidence":
                 reasons.append(f"low confidence: top {g.detail.get('top')}")
                 raise_to(Action.ABSTAIN if self.low_confidence_action == "abstain" else Action.ESCALATE)
             elif g.guard == "OptionOrder":

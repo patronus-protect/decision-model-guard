@@ -19,10 +19,16 @@ gate:
   scope: unordered                   # all | unordered
   threshold: 0.3
 guards:
+  - type: Coverage                   # long content: check the parts the model would cut off, window by window
+  - type: Invariance                 # same scene as markdown, shorter option wording: the answer must not change
+    formats: [markdown]
+    option_transforms: [short]
   - type: Confidence
     min_confidence: 0.55
   - type: OptionOrder
     permutations: reverse
+  # - type: Conformal                # abstain unless the conformal set has one option (dmguard calibrate)
+# calibration: calibration.json      # temperature + conformal threshold from your labelled cases
 policy:
   unstable_action: fallback
   scanner_action: report
@@ -48,3 +54,11 @@ boundary_note: false
 `gate: false` disables the gate. With `selector: detector` the gate reuses a configured `ClaimDetector` scanner (or
 creates one, taking `threshold`, `device` and `onnx` from the gate section). `PromptInjection` and `ClaimDetector` take
 `onnx` as well. `audit` takes `path`, `include_text` and `max_bytes`; `server` takes `auth_token_env` and `max_body_bytes`.
+
+## Guards
+
+`Confidence` (`min_confidence`, `min_margin`), `OptionOrder` (`permutations`, `samples`, `average`), `Coverage`
+(`max_tokens`, `overlap_tokens`, `max_windows`, `margin`, `risk_threshold`; `gate: true` runs the configured gate inside
+every window), `Invariance` (`formats`, `option_transforms`, `option_variants`, `question_variants`, `tolerance`) and
+`Conformal` (`calibration: path.json`, or the top-level `calibration`). A top-level `calibration: path.json` also wraps
+the model in `Calibrated`. See [robustness.md](robustness.md).

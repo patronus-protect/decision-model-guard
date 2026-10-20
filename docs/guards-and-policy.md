@@ -26,6 +26,15 @@ Asks the model again with the options reordered and maps the answers back. `perm
 
 `min_confidence` (top probability) and `min_margin` (lead over the second option).
 
+## Coverage, Invariance, Conformal
+
+`Coverage` checks scenes longer than the model's context window by window, `Invariance` re-asks with other formats and
+reworded options, `Conformal` abstains unless the calibrated prediction set holds one option. Details and examples:
+[robustness.md](robustness.md).
+
+Guards receive the decision context: a custom guard whose `check()` accepts `risky`, `order` and `fallback` keyword
+arguments gets them; older guards with the six positional parameters keep working.
+
 ## Policy
 
 | Field | Values | Default |
@@ -34,8 +43,9 @@ Asks the model again with the options reordered and maps the answers back. `perm
 | `unstable_action` | `fallback`, `escalate`, `keep` | `fallback` (escalates when no fallback option is set) |
 | `scanner_action` | `report`, `escalate`, `cautious`, `block` | `report` |
 | `block_scanners` | scanner names | `()` |
-| `low_confidence_action` | `abstain`, `escalate` | `abstain` |
-| `inconsistent_action` | `escalate`, `report` | `escalate` |
+| `low_confidence_action` | `abstain`, `escalate` (Confidence, Conformal) | `abstain` |
+| `inconsistent_action` | `escalate`, `report` (OptionOrder, Invariance) | `escalate` |
+| `coverage_action` | `apply`, `escalate`, `report` (Coverage: take the more cautious window answer, fallback for unordered decisions) | `apply` |
 | `fallback_option` | option index | `None` (a per-decision `fallback=` wins) |
 
 The final action is the most severe one triggered: block > abstain > escalate > fallback > cautious > allow.

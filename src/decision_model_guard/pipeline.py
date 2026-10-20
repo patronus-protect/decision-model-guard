@@ -1,6 +1,7 @@
 """The pipeline: content scanners -> steering gate -> decision checks -> policy -> audit."""
 from __future__ import annotations
 
+import inspect
 import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -154,7 +155,8 @@ class DecisionGuard:
             outcome = GateOutcome(probs=p, raw=p, index=i, raw_index=i, flagged=False, stable=True)
         calls = outcome.calls
         for g in self.guards:
-            r = g.check(self.model, model_scene, q, options, outcome.probs if outcome.flagged else outcome.raw, k)
+            r = _check(g, self.model, model_scene, q, options, outcome.probs if outcome.flagged else outcome.raw, k,
+                       risky=risky, order=order, fallback=fallback)
             reports.append(r)
             calls += r.calls
         index, probs, action, reasons = self.policy.apply(k, outcome, scans, reports[1:] if self.gate is not None else reports,
@@ -185,6 +187,17 @@ class DecisionGuard:
                 return [guard.decide(s, question, options, risky=risky, order=order, fallback=fallback).probs for s in scenes]
 
         return _Guarded()
+
+
+def _check(guard, *args, **ctx) -> GuardReport:
+    """Call a guard; the decision context (risky, order, fallback) goes only to guards whose check() accepts it."""
+    try:
+        params = inspect.signature(guard.check).parameters.values()
+    except (TypeError, ValueError):
+        params = ()
+    if any(p.kind == p.VAR_KEYWORD for p in params) or {p.name for p in params} >= set(ctx):
+        return guard.check(*args, **ctx)
+    return guard.check(*args)
 
 
 def guard_decision(model: DecisionModel | DecideBatch, scene: str | Scene, question: str, options: Sequence[str], **kw) -> GuardedDecision:
