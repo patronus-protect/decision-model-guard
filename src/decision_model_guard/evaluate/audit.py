@@ -218,9 +218,11 @@ def _hit(kind: str, answer: int | None, target: int | None, gold: int, base: int
 
 
 def audit(model: DecisionModel | DecideBatch, cases: Sequence[dict[str, Any]] | None = None, guard: DecisionGuard | None = None,
-          families: Sequence[str] = tuple(FAMILIES), per_case: int = 2, padding_tokens: int | None = None, seed: int = 0) -> AuditReport:
+          families: Sequence[str] = tuple(FAMILIES), per_case: int = 2, padding_tokens: int | None = None, seed: int = 0,
+          log_decisions: bool = False) -> AuditReport:
     """Run the audit. Without `guard` only the model alone is measured. Cases follow the evaluation format
-    ({"scene", "question", "options", "gold"} plus "risky" or "order"); default: the bundled sample cases."""
+    ({"scene", "question", "options", "gold"} plus "risky" or "order"); default: the bundled sample cases. The guarded
+    decisions are not written to the guard's audit log unless `log_decisions=True`."""
     bad = [f for f in families if f not in FAMILIES]
     if bad:
         raise ValueError(f"unknown checks {bad}; available: {list(FAMILIES)}")
@@ -228,6 +230,8 @@ def audit(model: DecisionModel | DecideBatch, cases: Sequence[dict[str, Any]] | 
         raise ValueError("per_case must be at least 1")
     m = as_model(model)
     cases = list(cases) if cases is not None else load_cases()
+    if guard is not None and not log_decisions:
+        guard = guard.without_audit()
     rng, bank = random.Random(seed), claim_bank()
     budget = padding_tokens or int(1.2 * (getattr(m, "context_tokens", None) or 2048))
     res = {f: FamilyResult(f, FAMILIES[f][0]) for f in families}

@@ -327,3 +327,20 @@ def test_partial_or_skipped_coverage_is_reported():
     assert strict.decide(scene, "Which team?", ["Billing.", "Technical.", "General."]).action == Action.ESCALATE
     plain = DecisionGuard(lambda s, q, o: [[0.8, 0.1, 0.1]] * len(s), guards=[Coverage()]).decide(scene, "Which team?", ["a", "b", "c"])
     assert any("Coverage did not run" in r for r in plain.reasons)       # 0.1.2: no reason at all
+
+
+def test_eval_and_audit_keep_the_decision_log_clean(tmp_path, capsys):
+    from decision_model_guard.evaluate import evaluate
+    log = tmp_path / "logs" / "decisions.jsonl"
+    cfg = tmp_path / "c.yml"
+    cfg.write_text(yaml.safe_dump({"model": {"type": "callable", "target": "helpers:gullible"}, "audit": {"path": str(log)}}))
+    cases = tmp_path / "cases.jsonl"
+    cases.write_text("\n".join(json.dumps(c) for c in REFUND_CASES) + "\n")
+    assert main(["audit", "--config", str(cfg), "--cases", str(cases), "--check", "claim", "--per-case", "1"]) == 0
+    assert main(["eval", "--config", str(cfg), "--cases", str(cases), "--attacks", "1", "--controls", "1"]) == 0
+    assert not log.exists()                                             # 0.1.2 wrote about 70 synthetic decisions here
+    assert main(["audit", "--config", str(cfg), "--cases", str(cases), "--check", "claim", "--per-case", "1", "--audit-log"]) == 0
+    assert log.exists()
+    g = build_guard(cfg)
+    evaluate(g.model, REFUND_CASES, guard=g, attacks_per_case=1, controls_per_case=0)
+    assert g.audit is not None                                          # the caller's guard keeps its logger

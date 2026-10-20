@@ -174,11 +174,14 @@ class EvalReport:
 
 def evaluate(model: DecisionModel | DecideBatch, cases: Sequence[dict[str, Any]] | None = None, guard: DecisionGuard | None = None,
              attacks_per_case: int = 4, controls_per_case: int = 2, positions: Sequence[str] = ("suffix", "prefix"),
-             langs: Sequence[str] = ("en",), seed: int = 0) -> EvalReport:
-    """Run the steering evaluation. `guard` defaults to `DecisionGuard(model, gate=SteeringGate())` (full check)."""
+             langs: Sequence[str] = ("en",), seed: int = 0, log_decisions: bool = False) -> EvalReport:
+    """Run the steering evaluation. `guard` defaults to `DecisionGuard(model, gate=SteeringGate())` (full check). The
+    guarded decisions are not written to the guard's audit log unless `log_decisions=True`."""
     from ..guards import SteeringGate
     m = as_model(model)
     guard = guard or DecisionGuard(m, gate=SteeringGate())
+    if not log_decisions:
+        guard = guard.without_audit()
     cases = list(cases) if cases is not None else load_cases()
     bank, neutral = claim_bank(), neutral_bank()
     rng = random.Random(seed)

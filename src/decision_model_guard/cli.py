@@ -75,7 +75,7 @@ def cmd_eval(args) -> int:
     from .evaluate import evaluate, load_cases
     g = _guard(args)
     rep = evaluate(g.model, load_cases(args.cases), guard=g, attacks_per_case=args.attacks, controls_per_case=args.controls,
-                   langs=args.lang or ["en"], seed=args.seed)
+                   langs=args.lang or ["en"], seed=args.seed, log_decisions=args.audit_log)
     md = rep.to_markdown()
     print(md)
     if args.out:
@@ -87,7 +87,7 @@ def cmd_audit(args) -> int:
     from .evaluate import FAMILIES, audit, load_cases
     g = _guard(args)
     rep = audit(g.model, load_cases(args.cases), guard=None if args.no_guard else g, families=args.check or list(FAMILIES),
-                per_case=args.per_case, padding_tokens=args.padding_tokens, seed=args.seed)
+                per_case=args.per_case, padding_tokens=args.padding_tokens, seed=args.seed, log_decisions=args.audit_log)
     md = rep.to_markdown()
     print(md)
     if args.out:
@@ -173,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
             q.add_argument("--lang", action="append")
             q.add_argument("--seed", type=int, default=0)
             q.add_argument("--out", help="write the report as JSON")
+            q.add_argument("--audit-log", action="store_true", help="also write the guarded test decisions to the configured audit log")
         if name == "audit":
             q.add_argument("--cases", help="JSONL cases (default: bundled samples)")
             q.add_argument("--check", action="append", help="run only these checks (repeatable)")
@@ -183,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
             q.add_argument("--out", help="write the report as JSON")
             q.add_argument("--markdown", help="write the scorecard as Markdown")
             q.add_argument("--max-attack-success", type=float, help="exit 2 when an attack check exceeds this rate (CI)")
+            q.add_argument("--audit-log", action="store_true", help="also write the guarded test decisions to the configured audit log")
         if name == "calibrate":
             q.add_argument("--cases", required=True, help="labelled JSONL cases for fitting")
             q.add_argument("--test", help="labelled JSONL cases to check coverage on")

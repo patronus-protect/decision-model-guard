@@ -1,6 +1,7 @@
 """The pipeline: content scanners -> steering gate -> decision checks -> policy -> audit."""
 from __future__ import annotations
 
+import copy
 import inspect
 import time
 from collections.abc import Iterable, Sequence
@@ -140,6 +141,13 @@ class DecisionGuard:
             r = r if isinstance(r, Request) else Request(**r)
             out.append(self.decide(r.scene, r.question, r.options, risky=r.risky, order=r.order, fallback=r.fallback, meta=r.meta))
         return out
+
+    def without_audit(self) -> DecisionGuard:
+        """The same guard (a shallow copy) without the audit logger: evaluations and audits use it, so synthetic
+        decisions do not end up in the decision log."""
+        g = copy.copy(self)
+        g.audit = None
+        return g
 
     def as_model(self, risky: Iterable[int] | None = None, order: Sequence[int] | None = None, fallback: int | None = None) -> DecisionModel:
         """The guarded pipeline as a decision model (guarded probabilities), so it can sit wherever a model is expected."""
