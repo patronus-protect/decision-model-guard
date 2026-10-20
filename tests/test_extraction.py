@@ -215,7 +215,7 @@ class Handler(BaseHTTPRequestHandler):
             res = {"answers": {k: {"type": v["type"], "value": 42} for k, v in body["fields"].items()}, "truncated": False}
         else:
             res = None
-        out = {"result": res, "success": res is not None, "errors": [] if res else [{"message": "secret upstream detail"}]}
+        out = {"result": res, "success": res is not None, "errors": [] if res else [{"message": "upstream validation detail"}]}
         data = json.dumps(out).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -260,12 +260,13 @@ def test_rest_mode_reads_credentials_from_the_environment(server, monkeypatch):
     assert SEEN[-1][1] == "Bearer tok"
 
 
-def test_error_envelope_does_not_echo_details(server):
+def test_error_envelope_names_the_service_error(server):
     bad = Clef(proxy_url=f"{server}/run")
     bad.url = f"{server}/run/@cf/cloudflare/unknown"
-    with pytest.raises(RuntimeError) as e:
-        bad.decide_batch(["x"], "q", ["a", "b"])
-    assert "secret upstream detail" not in str(e.value)
+    with pytest.raises(RuntimeError, match="Workers AI error for @cf/cloudflare/clef: upstream validation detail"):
+        bad.decide_batch(["x"], "q", ["a", "b"])                  # 0.1.2 hid the reason; credentials are never part of it
+    with pytest.raises(ValueError, match="variant"):
+        Clef(variant="no-such-model", proxy_url=f"{server}/run")
 
 
 def test_config_builds_clef(server):

@@ -59,8 +59,13 @@ model = HFClassifier("patronus-studio/wolf-defender-prompt-injection-small")   #
 
 ## Credentials
 
-HTTP adapters read keys from the environment variable you name (`api_key_env`) and never log them or echo response
-bodies in errors. `OpenAICompatible` without `api_key_env` sends `OPENAI_API_KEY` only to `api.openai.com`; for any
+HTTP adapters read keys from the environment variable you name (`api_key_env`) and never log them. They retry 408,
+409, 429, 5xx and dropped connections (`retries`), not other client errors, and raise `RuntimeError` with the status or
+the transport reason. Response bodies are not echoed, except the code and message of a service error envelope
+(`{"success": false, "errors": [...]}`, as Workers AI sends it), which are validation messages; such an error is not
+retried. In a batch, the first error stops the requests that have not started. An answer that names no option raises
+instead of turning into a uniform distribution: `OpenAICompatible` without log-probabilities reads the option text or
+exactly one option letter ("B", "Answer: B"), and `SystemOneHTTP` and `Clef` accept a `choice` id or option text. `OpenAICompatible` without `api_key_env` sends `OPENAI_API_KEY` only to `api.openai.com`; for any
 other server, name the variable explicitly.
 
 ## Cloudflare Workers AI: Clef

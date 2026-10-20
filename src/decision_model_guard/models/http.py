@@ -1,36 +1,87 @@
 """Decision models behind HTTP: Jev-like named-question endpoints and OpenAI-compatible chat servers."""
 from __future__ import annotations
 
+import http.client
 import json
 import math
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 
-from ..util import log, normalize
+from ..util import normalize
 
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
+RETRY = (408, 409, 429, 500, 502, 503, 504)
+
+
+def _api_errors(body: bytes) -> str:
+    """Code and message of a Workers AI style error envelope ({"success": false, "errors": [...]}), else "". These are
+    validation messages of the service; other response bodies are never echoed (they can hold content)."""
+    try:
+        out = json.loads(body.decode("utf-8", "replace"))
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    errs = out.get("errors") if isinstance(out, dict) and out.get("success") is False else None
+    if not isinstance(errs, list):
+        return ""
+    parts = [": ".join(str(e[k]) for k in ("code", "message") if isinstance(e, dict) and e.get(k) is not None) for e in errs]
+    return "; ".join(p for p in parts if p)[:300]
+
+
 def _post(url: str, body: dict, headers: dict, timeout: float, retries: int) -> dict:
+    """POST JSON, retry 408/409/429/5xx and transport failures, raise RuntimeError otherwise. Errors name the status or
+    the transport reason and, for a service error envelope, its code and message; never credentials or other bodies."""
     data = json.dumps(body).encode()
     for attempt in range(retries + 1):
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", **headers})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return json.load(resp)
+                raw = resp.read()
+            try:
+                return json.loads(raw)
+            except ValueError:
+                raise RuntimeError(f"unexpected response from {url}: not JSON") from None
         except urllib.error.HTTPError as e:
-            if e.code not in (408, 409, 429, 500, 502, 503, 504) or attempt == retries:
-                raise RuntimeError(f"HTTP {e.code} from {url}") from None   # never echo response bodies or credentials
-        except (urllib.error.URLError, TimeoutError):
+            detail = _api_errors(e.read(65536) if e.fp else b"")
+            if e.code not in RETRY or detail or attempt == retries:   # a validation error repeats: no retry
+                raise RuntimeError(f"HTTP {e.code} from {url}" + (f": {detail}" if detail else "")) from None
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
             if attempt == retries:
-                raise RuntimeError(f"transport failure for {url}") from None
+                reason = getattr(e, "reason", None) or type(e).__name__
+                raise RuntimeError(f"transport failure for {url}: {reason}") from None
         time.sleep(min(2 ** attempt * 0.5, 8))
     raise RuntimeError("unreachable")
+
+
+def _get(out: dict, url: str, *keys):
+    """out[k1][k2]... or a RuntimeError naming the missing key (no body echo)."""
+    for k in keys:
+        if not isinstance(out, (dict, list)) or (isinstance(out, dict) and k not in out) or (isinstance(out, list) and not out):
+            raise RuntimeError(f"unexpected response from {url}: no {k!r}")
+        out = out[k]
+    return out
+
+
+def _map(fn, items: Sequence, concurrency: int) -> list:
+    """fn over items in parallel; the first error cancels the requests that have not started and is raised."""
+    if len(items) <= 1 or concurrency <= 1:
+        return [fn(x) for x in items]
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        futs = [ex.submit(fn, x) for x in items]
+        done, _ = wait(futs, return_when=FIRST_EXCEPTION)
+        bad = next((f for f in futs if f in done and f.exception() is not None), None)
+        if bad is not None:
+            for f in futs:
+                f.cancel()
+            raise bad.exception()
+        return [f.result() for f in futs]
 
 
 def _auth_headers(headers: dict | None, api_key_env: str | None) -> dict:
@@ -38,6 +89,38 @@ def _auth_headers(headers: dict | None, api_key_env: str | None) -> dict:
     if api_key_env and os.environ.get(api_key_env):
         h["Authorization"] = f"Bearer {os.environ[api_key_env]}"
     return h
+
+
+def answer_index(text: str, options: Sequence[str]) -> int | None:
+    """The option a free-text answer names: the option text itself, or exactly one standalone option letter ("B",
+    "Answer: B", "(b)"). None when the answer names none or several."""
+    t = text.strip()
+    norm = lambda x: " ".join(x.lower().strip().rstrip(".!").split())  # noqa: E731
+    hit = [i for i, o in enumerate(options) if norm(t) == norm(o)]
+    if hit:
+        return hit[0]
+    letters = {m.group(1).upper() for m in re.finditer(r"(?<![A-Za-z])([A-Za-z])(?![A-Za-z])", re.sub(r"(?i)^\s*answer\s*[:=-]?", "", t))}
+    valid = [c for c in letters if c in LETTERS[: len(options)]]
+    return LETTERS.index(valid[0]) if len(valid) == 1 else None
+
+
+def choice_probs(ans: dict, options: Sequence[str], url: str) -> list[float]:
+    """Option probabilities from a named-question answer: `probabilities` (dict or list) or `choice` (an id o<i> or the
+    option text) with an optional `confidence`. Raises when the answer names no option."""
+    ids = [f"o{i}" for i in range(len(options))]
+    probs = ans.get("probabilities") or ans.get("distribution") if isinstance(ans, dict) else None
+    if isinstance(probs, list):                                       # [{"value": "o0", "probability": 0.3}, ...]
+        probs = {p.get("value"): p.get("probability", 0.0) for p in probs if isinstance(p, dict)}
+    if not probs and isinstance(ans, dict) and ans.get("choice") is not None:   # only a choice with a confidence
+        ch = ans["choice"]
+        k = ids.index(ch) if ch in ids else next((i for i, o in enumerate(options) if str(ch).strip().lower() == o.strip().lower()), None)
+        if k is None:
+            raise RuntimeError(f"unexpected answer from {url}: the choice is none of the options")
+        c = float(ans.get("confidence", 1.0))
+        probs = {i: (c if j == k else (1 - c) / max(1, len(ids) - 1)) for j, i in enumerate(ids)}
+    if not isinstance(probs, dict) or sum(float(probs.get(i, 0.0)) for i in ids) <= 0:
+        raise RuntimeError(f"unexpected answer from {url}: no probabilities for the options")
+    return normalize([float(probs.get(i, 0.0)) for i in ids])
 
 
 class SystemOneHTTP:
@@ -62,20 +145,10 @@ class SystemOneHTTP:
                                                                             "criteria": dict(zip(ids, options, strict=True))}}}
         if self.model:
             body["model"] = self.model
-        ans = _post(self.url, body, self.headers, self.timeout, self.retries)["answers"]["q"]
-        probs = ans.get("probabilities") or ans.get("distribution")
-        if isinstance(probs, list):                                   # [{"value": "o0", "probability": 0.3}, ...]
-            probs = {p.get("value"): p.get("probability", 0.0) for p in probs}
-        if probs is None:                                             # only a choice with a confidence
-            c = float(ans.get("confidence", 1.0))
-            probs = {i: (c if i == ans.get("choice") else (1 - c) / max(1, len(ids) - 1)) for i in ids}
-        return normalize([float(probs.get(i, 0.0)) for i in ids])
+        return choice_probs(_get(_post(self.url, body, self.headers, self.timeout, self.retries), self.url, "answers", "q"), options, self.url)
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
-        if len(scenes) == 1 or self.concurrency <= 1:
-            return [self._one(s, question, options) for s in scenes]
-        with ThreadPoolExecutor(max_workers=self.concurrency) as ex:
-            return list(ex.map(lambda s: self._one(s, question, options), scenes))
+        return _map(lambda s: self._one(s, question, options), list(scenes), self.concurrency)
 
 
 class OpenAICompatible:
@@ -104,7 +177,7 @@ class OpenAICompatible:
         body = {"model": self.model, "temperature": 0, "max_tokens": 1, "logprobs": True, "top_logprobs": self.top,
                 "messages": [{"role": "system", "content": self.system},
                              {"role": "user", "content": f"Input:\n{scene}\n\nQuestion: {question}\nOptions:\n{opts}\n\nAnswer with one letter."}]}
-        r = _post(self.url, body, self.headers, self.timeout, self.retries)["choices"][0]
+        r = _get(_post(self.url, body, self.headers, self.timeout, self.retries), self.url, "choices", 0)
         scores = [0.0] * len(options)
         content = ((r.get("logprobs") or {}).get("content") or [])
         if content:
@@ -112,17 +185,12 @@ class OpenAICompatible:
                 tk = t.get("token", "").strip().strip(".:)").upper()
                 if len(tk) == 1 and tk in letters:
                     scores[letters.index(tk)] += math.exp(float(t.get("logprob", -100)))
-        if sum(scores) == 0:
-            txt = (r.get("message", {}).get("content") or "").strip().upper()[:1]
-            if txt in letters:
-                scores[letters.index(txt)] = 1.0
-            else:
-                log.warning("openai-compatible: no usable answer, returning a uniform distribution")
-                return [1.0 / len(options)] * len(options)
+        if sum(scores) == 0:                                          # no log-probabilities: read the answer text
+            k = answer_index((r.get("message") or {}).get("content") or "", options)
+            if k is None:                                             # never a silent uniform answer (option 0, allow)
+                raise RuntimeError(f"no usable answer from {self.url}: expected one of the letters {', '.join(letters)}")
+            scores[k] = 1.0
         return normalize(scores)
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
-        if len(scenes) == 1 or self.concurrency <= 1:
-            return [self._one(s, question, options) for s in scenes]
-        with ThreadPoolExecutor(max_workers=self.concurrency) as ex:
-            return list(ex.map(lambda s: self._one(s, question, options), scenes))
+        return _map(lambda s: self._one(s, question, options), list(scenes), self.concurrency)

@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from ..util import normalize
-from .http import _auth_headers, _post
+from .http import _auth_headers, _get, _map, _post, choice_probs
 
 API = "https://api.cloudflare.com/client/v4"
 
@@ -36,24 +34,26 @@ class _WorkersAI:
 
     def _run(self, payload: dict[str, Any]) -> dict[str, Any]:
         out = _post(self.url, payload, self.headers, self.timeout, self.retries)
+        if isinstance(out, dict) and out.get("success") is False:      # the error envelope on HTTP 200
+            errs = "; ".join(f"{e.get('code', '')}: {e.get('message', '')}".strip(": ") for e in out.get("errors") or [] if isinstance(e, dict))
+            raise RuntimeError(f"Workers AI error for {self.model}" + (f": {errs[:300]}" if errs else ""))
         if isinstance(out, dict) and "result" in out:
-            if out.get("success") is False:
-                raise RuntimeError(f"Workers AI error for {self.model}")      # error bodies are not echoed
             return out["result"]
         return out
 
     def _map(self, fn, items: Sequence[Any]) -> list[Any]:
-        if len(items) <= 1 or self.concurrency <= 1:
-            return [fn(x) for x in items]
-        with ThreadPoolExecutor(max_workers=self.concurrency) as ex:
-            return list(ex.map(fn, items))
+        return _map(fn, list(items), self.concurrency)
 
 
 class Clef(_WorkersAI):
     """Cloudflare's decision model on Workers AI as a decision model (`decide_batch`). `variant`: "clef" or "clef-flash".
     The options become choice criteria o0, o1, ...; one request per scene, run in parallel (`concurrency`)."""
 
+    VARIANTS = ("clef", "clef-flash")
+
     def __init__(self, variant: str = "clef", **kw):
+        if variant not in self.VARIANTS:
+            raise ValueError(f"variant must be one of {self.VARIANTS}, got {variant!r}")
         super().__init__(f"@cf/cloudflare/{variant}", **kw)
         self.variant, self.name = variant, f"cloudflare/{variant}"
 
@@ -61,8 +61,7 @@ class Clef(_WorkersAI):
         ids = [f"o{i}" for i in range(len(options))]
         res = self._run({"model": self.variant, "state": scene,
                          "questions": {"q": {"type": "choice", "instructions": question, "criteria": dict(zip(ids, options, strict=True))}}})
-        probs = res["answers"]["q"].get("probabilities") or {}
-        return normalize([float(probs.get(i, 0.0)) for i in ids])
+        return choice_probs(_get(res, self.url, "answers", "q"), options, self.url)
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
         return self._map(lambda s: self._one(s, question, options), list(scenes))
@@ -82,7 +81,7 @@ class Clairic(_WorkersAI):
         payload: dict[str, Any] = {"model": "clairic", "state": scene, "fields": fields}
         if self.reference_date:
             payload["reference_date"] = self.reference_date
-        return self._run(payload)["answers"]
+        return _get(self._run(payload), self.url, "answers")
 
     def extract(self, scenes: Sequence[str], fields: dict[str, dict[str, Any]]) -> list[dict[str, dict[str, Any]]]:
         return self._map(lambda s: self._one(s, fields), list(scenes))
