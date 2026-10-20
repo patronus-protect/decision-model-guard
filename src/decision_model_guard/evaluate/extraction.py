@@ -50,9 +50,11 @@ class ExtractionReport:
     skipped: list[str] = field(default_factory=list)   # cases whose reference value is not a number
 
     def to_dict(self) -> dict[str, Any]:
+        """The report as a dict."""
         return self.__dict__.copy()
 
     def to_markdown(self) -> str:
+        """The report as a Markdown table."""
         pct = lambda x: "n/a" if x is None else f"{100 * x:.1f} %"  # noqa: E731
         return "\n".join([
             f"# Extraction steering: {self.model}", "",

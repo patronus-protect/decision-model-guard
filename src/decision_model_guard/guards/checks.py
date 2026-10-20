@@ -14,8 +14,8 @@ class OptionOrder:
     """Asks the model again with the options in a different order and maps the answers back. A decision whose answer
     depends on where an option is listed is not robust; decision-model documentation names option order as a known
     source of error. permutations: "reverse" (1 extra call), "rotate" (n-1 calls), "random" (`samples` calls), "all"
-    (every permutation, small option lists only). With `average=True` the guarded probabilities become the mean over
-    all orders (debiasing)."""
+    (every permutation, small option lists only). With `average=True` the report also holds the mean probabilities over
+    all orders (`detail["averaged_probs"]`); the decision itself does not change."""
 
     name = "OptionOrder"
 
@@ -45,6 +45,7 @@ class OptionOrder:
 
     def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind,
               *, raw_probs: Sequence[float] | None = None, **_ctx) -> GuardReport:
+        """Ask again with the options reordered; flag the decision when the mapped-back answer changes."""
         probs = list(raw_probs if raw_probs is not None else probs)       # the model's own answer on this scene
         orders = self._orders(len(options))
         if not orders:
@@ -75,6 +76,7 @@ class Confidence:
         self.min_confidence, self.min_margin = min_confidence, min_margin
 
     def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind) -> GuardReport:
+        """Flag a top probability below min_confidence or a lead below min_margin."""
         s = sorted(probs, reverse=True)
         top, margin = s[0], s[0] - (s[1] if len(s) > 1 else 0.0)
         low = top < self.min_confidence or margin < self.min_margin

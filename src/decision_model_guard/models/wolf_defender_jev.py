@@ -40,6 +40,7 @@ class WolfDefenderJev:
         self.context_tokens = model.max_case                     # longer scenes keep the first third and the last two thirds
 
     def count_tokens(self, text: str) -> int:
+        """Tokens of a text in the model's tokenizer."""
         return len(self.model.tokenizer(text, add_special_tokens=False)["input_ids"])
 
     @classmethod
@@ -73,6 +74,7 @@ class WolfDefenderJev:
         return cls(model, **kw)
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """Option probabilities for each scene, batched by a token budget."""
         import torch
         m = self.model
         tok = m.tokenizer
@@ -146,11 +148,13 @@ class WolfDefenderJevONNX:
         self.context_tokens = max_case_tokens
 
     def count_tokens(self, text: str) -> int:
+        """Tokens of a text in the model's tokenizer."""
         return len(self.tok.encode(text, add_special_tokens=False).ids)
 
     @classmethod
     def from_pretrained(cls, repo_or_path: str = REPO, variant: str = "int8_int4_embeddings", revision: str | None = None,
                         threads: int | None = None, providers=None, **kw) -> WolfDefenderJevONNX:
+        """Load a variant (int8_int4_embeddings by default, or a path to an .onnx file) with its tokenizer and config."""
         from .._onnx import read_json, resolve, session, tokenizer
         folder, graph = resolve(repo_or_path, variant, files=("config.json", "tokenizer.json", "tokenizer_config.json"), revision=revision)
         cfg, tcfg = read_json(folder / "config.json"), read_json(folder / "tokenizer_config.json")
@@ -170,6 +174,7 @@ class WolfDefenderJevONNX:
         return ids
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """Option probabilities for each scene, batched by a token budget."""
         import numpy as np
 
         from .._onnx import pad, softmax

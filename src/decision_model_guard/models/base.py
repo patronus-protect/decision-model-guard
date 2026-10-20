@@ -22,7 +22,8 @@ class DecisionModel(Protocol):
 
     name: str
 
-    def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]: ...
+    def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """One probability list (one entry per option) for each scene."""
 
 
 class FunctionModel:
@@ -32,6 +33,7 @@ class FunctionModel:
         self.fn, self.name = fn, name
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """Call the wrapped function and validate its output."""
         return check_probs(self.fn(list(scenes), question, list(options)), len(scenes), len(options), self.name)
 
 

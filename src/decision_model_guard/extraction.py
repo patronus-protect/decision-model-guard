@@ -99,6 +99,7 @@ class GuardedExtraction:
         return any(v.action != "allow" for v in self.fields.values())
 
     def to_dict(self) -> dict[str, Any]:
+        """The extraction as a JSON-serialisable dict."""
         return {"id": self.id, "values": self.values, "changed": self.changed, "flagged": self.flagged, "calls": self.calls,
                 "latency_ms": round(self.latency_ms, 2), "fields": {k: asdict(v) for k, v in self.fields.items()},
                 "scans": [s.to_dict() for s in self.scans]}

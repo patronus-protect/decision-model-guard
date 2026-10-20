@@ -41,6 +41,7 @@ class AuditLogger:
         return hmac.new(self._key, text.encode("utf-8"), hashlib.sha256).hexdigest() if self._key else sha256(text)
 
     def record(self, d: GuardedDecision, scene: str, question: str, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+        """The JSON record of one decision: hashes (or text with include_text), actions, scores, meta."""
         meta = meta or {}
         size = len(json.dumps(meta, ensure_ascii=False, default=str))
         if size > self.max_meta_bytes:
@@ -71,6 +72,7 @@ class AuditLogger:
             os.remove(self.path)
 
     def log(self, d: GuardedDecision, scene: str, question: str, meta: dict[str, Any] | None = None) -> None:
+        """Append the record of one decision (thread-safe, rotating at max_bytes)."""
         line = json.dumps(self.record(d, scene, question, meta), ensure_ascii=False, default=str)
         with self._lock:
             if self.max_bytes and os.path.exists(self.path) and os.path.getsize(self.path) > self.max_bytes:

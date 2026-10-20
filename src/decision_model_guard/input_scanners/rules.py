@@ -55,6 +55,7 @@ class InvisibleText:
         self.remove = remove
 
     def scan(self, text: str) -> ScanResult:
+        """Find invisible characters and remove them from the sanitized text."""
         spans = hidden_spans(text)
         if not spans:
             return ScanResult(self.name, text, True, 0.0)
@@ -85,6 +86,7 @@ class ForgedTrustBlock:
         self._words = re.compile(self.WORDS, re.I)
 
     def scan(self, text: str) -> ScanResult:
+        """Find trusted-looking headers, chat role markers and speaker labels."""
         findings: list[Finding] = []
         heads = list(self.HEADER.finditer(text))
         for i, m in enumerate(heads):
@@ -125,6 +127,7 @@ class VerdictTokens:
         self.threshold, self.redact = threshold, redact
 
     def scan(self, text: str) -> ScanResult:
+        """Find verdict tokens such as verdict: safe or label=benign."""
         findings = [Finding(self.name, 1.0, "verdict token in content", m.start(), m.end(), m.group(0))
                     for rx in (self.PLAIN, self.JSON) for m in rx.finditer(text)]
         score = 1.0 if findings else 0.0
@@ -144,6 +147,7 @@ class Regex:
             self.name = name
 
     def scan(self, text: str) -> ScanResult:
+        """Match the patterns (invalid on a match, or without one when is_blocked=False)."""
         hits = [(m.start(), m.end(), m.group(0)) for rx in self.patterns for m in rx.finditer(text)]
         findings = [Finding(self.name, 1.0, "pattern match", a, b, t) for a, b, t in hits]
         if self.is_blocked:
@@ -164,6 +168,7 @@ class BanSubstrings:
         self.subs, self.cs, self.redact, self.match_all = list(substrings), case_sensitive, redact, match_all
 
     def scan(self, text: str) -> ScanResult:
+        """Invalid when a banned substring (or all of them, with match_all) occurs."""
         hay = text if self.cs else text.lower()
         spans = []
         found = set()
@@ -194,11 +199,13 @@ class TokenLimit:
             self._tok = require("transformers", "hf").AutoTokenizer.from_pretrained(tokenizer)
 
     def count(self, text: str) -> int:
+        """Token count (the tokenizer's, or words x 1.3)."""
         if self._tok is not None:
             return len(self._tok.encode(text, add_special_tokens=False))
         return int(len(text.split()) * 1.3) + 1
 
     def scan(self, text: str) -> ScanResult:
+        """Invalid above the limit; the sanitized text keeps head and tail."""
         n = self.count(text)
         if n <= self.limit:
             return ScanResult(self.name, text, True, 0.0)

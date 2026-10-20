@@ -23,7 +23,8 @@ gate cannot check it; the report counts it as `unerased` and the policy escalate
 ## OptionOrder
 
 Asks the model again with the options reordered and maps the answers back. `permutations`: `"reverse"` (1 extra call),
-`"rotate"` (n-1), `"random"` (`samples`), `"all"`. `average=True` reports the mean probabilities over all orders.
+`"rotate"` (n-1), `"random"` (`samples`), `"all"`. `average=True` reports the mean probabilities over all orders in
+the guard report (`detail["averaged_probs"]`); the decision itself does not change.
 
 ## Confidence
 

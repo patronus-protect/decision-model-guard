@@ -236,6 +236,7 @@ class Scene:
         return self.add(h, text, False)
 
     def to_text(self) -> str:
+        """The scene in the text format ([HEADER] lines, blocks separated by blank lines)."""
         return "\n\n".join(f"[{h}]\n{t}" for h, t, _ in self.blocks)
 
     def layout(self) -> tuple[str, list[Block]]:

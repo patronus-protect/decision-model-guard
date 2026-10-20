@@ -96,6 +96,7 @@ class Coverage:
     def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind,
               *, risky: Sequence[int] | None = None, order: Sequence[int] | None = None, fallback: int | None = None,
               blocks: Sequence[Block] | None = None) -> GuardReport:
+        """Check a scene longer than the model's context window by window."""
         budget, count = self._budget(model)
         if not budget:                                          # the policy reports it: an unchecked long scene is not "covered"
             return GuardReport(self.name, False, detail={"skipped": "unknown context size: pass Coverage(max_tokens=...)"})

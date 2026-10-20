@@ -80,10 +80,12 @@ def load_cases(path: str | Path | None = None) -> list[dict[str, Any]]:
 
 
 def claim_bank() -> dict[str, Any]:
+    """The claim templates by language and family."""
     return yaml.safe_load(_data("claims.yaml"))
 
 
 def neutral_bank() -> dict[str, list[str]]:
+    """Neutral control sentences by language."""
     return yaml.safe_load(_data("neutral.yaml"))["neutral"]
 
 
@@ -150,9 +152,11 @@ class EvalReport:
     cautious_success_guarded: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """The report as a dict."""
         return self.__dict__.copy()
 
     def to_markdown(self) -> str:
+        """The report as Markdown tables."""
         f = lambda x: "n/a" if x is None else f"{100 * x:.1f} %"  # noqa: E731
         rows = [("Accuracy on originals", f(self.accuracy_raw), f(self.accuracy_guarded)),
                 ("Attack success", f(self.attack_success_raw), f(self.attack_success_guarded)),

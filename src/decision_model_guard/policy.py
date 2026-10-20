@@ -56,6 +56,7 @@ class Policy:
     @staticmethod
     def cautious_index(kind: Kind, probs: Sequence[float], risky: Sequence[int] | None, order: Sequence[int] | None,
                        fallback: int | None) -> int | None:
+        """The most cautious option: the riskiest risky option, the first of the order, else the fallback."""
         if kind == Kind.RISKY and risky:
             return max(risky, key=lambda i: probs[i])
         if kind == Kind.ORDERED and order:
@@ -65,6 +66,7 @@ class Policy:
     def apply(self, kind: Kind, gate: GateOutcome, scans: Sequence[ScanResult], guards: Sequence[GuardReport],
               risky: Sequence[int] | None = None, order: Sequence[int] | None = None, fallback: int | None = None
               ) -> tuple[int | None, list[float], Action, list[str]]:
+        """(answer index, probabilities, action, reasons) from the gate outcome, scans and guard reports."""
         fb = fallback if fallback is not None else self.fallback_option
         index, probs = gate.raw_index, list(gate.raw)
         action, reasons = Action.ALLOW, []

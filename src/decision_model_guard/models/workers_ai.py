@@ -64,6 +64,7 @@ class Clef(_WorkersAI):
         return choice_probs(_get(res, self.url, "answers", "q"), options, self.url)
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """One request per scene, in parallel; the first error stops the batch."""
         return self._map(lambda s: self._one(s, question, options), list(scenes))
 
 
@@ -84,4 +85,5 @@ class Clairic(_WorkersAI):
         return _get(self._run(payload), self.url, "answers")
 
     def extract(self, scenes: Sequence[str], fields: dict[str, dict[str, Any]]) -> list[dict[str, dict[str, Any]]]:
+        """One {field: answer} dict per scene, one request each, in parallel."""
         return self._map(lambda s: self._one(s, fields), list(scenes))

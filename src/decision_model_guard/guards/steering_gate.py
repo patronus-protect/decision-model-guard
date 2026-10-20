@@ -133,6 +133,7 @@ class SteeringGate:
     def run(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], kind: Kind,
             risky: Sequence[int] | None = None, order: Sequence[int] | None = None, hints: Sequence[str] = (),
             blocks: Sequence[Block] | None = None) -> tuple[GuardReport, GateOutcome]:
+        """Score the scene and its variants in one batch and apply the rule for the decision type."""
         V, n_flagged, unerased, n_units, skipped = self._plan(scene, kind, hints, blocks)
         P = checked(model, [scene] + [v for v, _ in V], question, options)
         top = [argmax(p) for p in P]

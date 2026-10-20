@@ -14,7 +14,8 @@ class Scanner(Protocol):
 
     name: str
 
-    def scan(self, text: str) -> ScanResult: ...
+    def scan(self, text: str) -> ScanResult:
+        """Scan one untrusted text: sanitized text, valid flag, risk score, findings."""
 
 
 _MODELS: dict[tuple[str, str, str | None], tuple[Any, Any]] = {}

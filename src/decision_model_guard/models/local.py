@@ -27,9 +27,11 @@ class CausalLMJudge:
         self.context_tokens = max_tokens                         # longer scenes keep their last max_tokens tokens
 
     def count_tokens(self, text: str) -> int:
+        """Tokens of a text in the model's tokenizer."""
         return len(self.tok.encode(text, add_special_tokens=False))
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """Next-token probabilities of the option letters, renormalised over the options."""
         import torch
         ids = [self.tok.encode(" " + LETTERS[i], add_special_tokens=False)[-1] for i in range(len(options))]
         opts = "\n".join(f"{LETTERS[i]}. {o}" for i, o in enumerate(options))
@@ -65,9 +67,11 @@ class HFClassifier:
         self.context_tokens = max_length - 2                     # longer scenes keep their first tokens
 
     def count_tokens(self, text: str) -> int:
+        """Tokens of a text in the model's tokenizer."""
         return len(self.tok.encode(text, add_special_tokens=False))
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """Classifier probabilities of the labels mapped to the options (the question is ignored)."""
         labels = self.option_labels or list(range(len(options)))
         if len(labels) != len(options):
             raise ValueError("option_labels must name one classifier label per option")

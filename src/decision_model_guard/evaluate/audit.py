@@ -64,6 +64,7 @@ class FamilyResult:
     actions: dict[str, int] = field(default_factory=dict)       # guarded actions, e.g. {"allow": 10, "fallback": 2}
 
     def rates(self) -> dict[str, float | None]:
+        """raw, guarded and flagged as shares of n (None when n is 0)."""
         f = (lambda k: k / self.n) if self.n else (lambda k: None)
         return {"raw": f(self.raw), "guarded": f(self.guarded), "flagged": f(self.flagged)}
 
@@ -84,6 +85,7 @@ class AuditReport:
     wrong_cases: int = 0                      # cases the model alone answers wrongly: no attack runs on them
 
     def to_dict(self) -> dict[str, Any]:
+        """The report as a JSON-serialisable dict."""
         row = lambda v: {**v.__dict__, **{f"{r}_rate": x for r, x in v.rates().items()}}  # noqa: E731
         return {"model": self.model, "cases": self.cases, "accuracy_raw": self.accuracy_raw, "accuracy_guarded": self.accuracy_guarded,
                 "raw_calls": self.raw_calls, "guarded_calls": self.guarded_calls, "wrong_cases": self.wrong_cases,
@@ -100,6 +102,7 @@ class AuditReport:
         return [k for k, v in self.families.items() if v.n and v.raw / v.n >= threshold]
 
     def to_markdown(self) -> str:
+        """The scorecard as Markdown."""
         pct = lambda x: "n/a" if x is None else f"{100 * x:.1f} %"  # noqa: E731
         guarded = self.accuracy_guarded is not None
         head = f"| Check | What it tests | n | Model alone |{' With guard | Guard flagged |' if guarded else ''}"

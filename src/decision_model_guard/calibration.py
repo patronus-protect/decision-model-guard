@@ -124,6 +124,7 @@ class Calibrator:
     @classmethod
     def fit_probs(cls, P: Sequence[Sequence[float]], y: Sequence[int], alpha: float = 0.1, risky: Sequence[int] | None = None,
                   target_fprs: Sequence[float] = (0.001, 0.01, 0.05, 0.1), tasks: Sequence[str] | None = None) -> Calibrator:
+        """Fit on precomputed probabilities and gold indices (see fit)."""
         if len(P) != len(y) or not P:
             raise ValueError("need one probability list per gold label")
         t = fit_temperature(P, y)
@@ -144,6 +145,7 @@ class Calibrator:
 
     # ------------------------------------------------------------------ use
     def calibrate(self, probs: Sequence[float]) -> list[float]:
+        """Temperature-scaled probabilities (the argmax does not change)."""
         return _scale(normalize(probs), self.temperature)
 
     def prediction_set(self, probs: Sequence[float], calibrated: bool = False) -> list[int]:
@@ -163,6 +165,7 @@ class Calibrator:
                 "mean_set_size": sum(len(s) for s in sets) / len(y), "ece": _ece([self.calibrate(p) for p in P], y)}
 
     def summary(self) -> str:
+        """A few lines for humans: temperature, ECE/NLL, set sizes, risk thresholds."""
         m = self.metrics
         lines = [f"Calibration on {self.n} cases: temperature {self.temperature:.3f}, accuracy {100 * m.get('accuracy', 0):.1f} %",
                  f"ECE {100 * m.get('ece_before', 0):.1f} -> {100 * m.get('ece_after', 0):.1f}, NLL {m.get('nll_before', 0):.3f} -> {m.get('nll_after', 0):.3f}"]
@@ -179,14 +182,17 @@ class Calibrator:
 
     # ------------------------------------------------------------------ persistence
     def to_dict(self) -> dict[str, Any]:
+        """The calibration as a JSON-serialisable dict."""
         return {"temperature": self.temperature, "qhat": self.qhat, "alpha": self.alpha, "n": self.n, "metrics": self.metrics,
                 "operating_points": self.operating_points, "risky": self.risky, "tasks": self.tasks}
 
     def save(self, path: str | Path) -> None:
+        """Write the calibration as JSON."""
         Path(path).write_text(json.dumps(self.to_dict(), indent=2) + "\n", encoding="utf-8")
 
     @classmethod
     def load(cls, path: str | Path) -> Calibrator:
+        """Read a calibration file written by save()."""
         return cls(**json.loads(Path(path).read_text(encoding="utf-8")))
 
 
@@ -222,6 +228,7 @@ class Calibrated:
                 setattr(self, attr, getattr(self.model, attr))
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """The wrapped model's probabilities after temperature scaling."""
         return [self.calibrator.calibrate(p) for p in self.model.decide_batch(scenes, question, options)]
 
 
@@ -241,6 +248,7 @@ class Conformal:
 
     def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind,
               **_ctx) -> GuardReport:
+        """Flag the decision when the conformal prediction set does not hold exactly one option."""
         tasks = self.calibrator.tasks
         if tasks and not any(question.startswith(t) for t in tasks):   # startswith: a boundary note may follow the question
             return GuardReport(self.name, False, 0.0, 0, {"skipped": "not calibrated for this question"})

@@ -44,6 +44,7 @@ class Request:
     order: Sequence[int] | None = None
     fallback: int | None = None
     meta: dict[str, Any] | None = None
+    kind: str | Kind | None = None
 
 
 class DecisionGuard:
@@ -73,14 +74,18 @@ class DecisionGuard:
 
     @classmethod
     def default(cls, model: DecisionModel | DecideBatch, device: str | None = None, detector_threshold: float = 0.3,
-                onnx: str | None = None, **kw) -> DecisionGuard:
+                onnx: str | None = None, extra_scanners: Sequence[Scanner] = (), **kw) -> DecisionGuard:
         """Recommended setup: rule-based scanners, claim detector, full check for risky and ordered decisions, detector-led
         check for unordered ones (where the full check falls back too often). `onnx` runs the claim detector on ONNX
         Runtime ("int8_int4_embeddings" is the 96 MB variant, also used when torch is not installed); combine it with
-        WolfDefenderJev.from_pretrained(onnx=...) for a setup without torch. The detector is loaded (and downloaded) here."""
+        WolfDefenderJev.from_pretrained(onnx=...) for a setup without torch. The detector is loaded (and downloaded) here.
+        `extra_scanners` (for example PromptInjection) run after the default scanners; other keywords (guards, policy,
+        audit, ...) go to DecisionGuard."""
         from .input_scanners import ClaimDetector, ForgedTrustBlock, InvisibleText, VerdictTokens
+        if "scanners" in kw or "gate" in kw:
+            raise TypeError("default() sets scanners and gate itself; pass extra_scanners=[...] or build DecisionGuard(...)")
         det = ClaimDetector(threshold=detector_threshold, device=device, onnx=onnx)
-        return cls(model, scanners=[InvisibleText(), ForgedTrustBlock(), VerdictTokens(), det],
+        return cls(model, scanners=[InvisibleText(), ForgedTrustBlock(), VerdictTokens(), det, *extra_scanners],
                    gate=SteeringGate(selector="detector", detector=det, threshold=detector_threshold, scope="unordered"), **kw).warmup()
 
     def warmup(self) -> DecisionGuard:
@@ -102,6 +107,13 @@ class DecisionGuard:
     def decide(self, scene: str | Scene, question: str, options: Sequence[str], *, risky: Iterable[int] | None = None,
                order: Sequence[int] | None = None, fallback: int | None = None, kind: str | Kind | None = None,
                meta: dict[str, Any] | None = None) -> GuardedDecision:
+        """One guarded decision.
+
+        scene: a `Scene` (block trust as built) or a string in the scene format (parsed). risky: indices of the risky
+        options (security verdicts), or order: every option index, most cautious first, or neither (unordered, with an
+        optional fallback index). kind is derived from these and only checked when given. meta goes to the audit log as
+        it is. Returns a GuardedDecision (answer, action, reasons, probabilities, scans, guard reports); raises
+        ValueError for inconsistent arguments and ModelOutputError for invalid model output."""
         t0 = time.perf_counter()
         options, risky, order, k = check_decision(options, risky, order, fallback, kind)
         if fallback is None and self.policy.fallback_option is not None and not 0 <= self.policy.fallback_option < len(options):
@@ -136,10 +148,12 @@ class DecisionGuard:
         return d
 
     def decide_many(self, requests: Iterable[Request | dict[str, Any]]) -> list[GuardedDecision]:
+        """decide() for each request (a Request or a dict with the same keys), in order."""
         out = []
         for r in requests:
             r = r if isinstance(r, Request) else Request(**r)
-            out.append(self.decide(r.scene, r.question, r.options, risky=r.risky, order=r.order, fallback=r.fallback, meta=r.meta))
+            out.append(self.decide(r.scene, r.question, r.options, risky=r.risky, order=r.order, fallback=r.fallback, meta=r.meta,
+                                   kind=r.kind))
         return out
 
     def without_audit(self) -> DecisionGuard:

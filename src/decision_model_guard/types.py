@@ -37,6 +37,7 @@ class Finding:
     text: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """The finding as a dict."""
         return asdict(self)
 
 
@@ -51,6 +52,7 @@ class ScanResult:
     findings: list[Finding] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        """The result as a dict (without the sanitized text)."""
         return {"scanner": self.scanner, "valid": self.valid, "score": round(self.score, 6), "findings": [f.to_dict() for f in self.findings]}
 
 
@@ -65,6 +67,7 @@ class GuardReport:
     detail: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        """The report as a dict."""
         return asdict(self)
 
 
@@ -105,6 +108,7 @@ class GuardedDecision:
         return self.action != Action.ALLOW
 
     def to_dict(self, include_scene: bool = False) -> dict[str, Any]:
+        """The decision as a JSON-serialisable dict; include_scene adds the scene the model read."""
         d = {"id": self.id, "answer": self.answer, "index": self.index, "probs": [round(p, 6) for p in self.probs],
              "raw_answer": self.raw_answer, "raw_index": self.raw_index, "raw_probs": [round(p, 6) for p in self.raw_probs],
              "action": self.action.value, "kind": self.kind.value, "changed": self.changed, "reasons": self.reasons,

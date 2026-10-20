@@ -148,6 +148,7 @@ class SystemOneHTTP:
         return choice_probs(_get(_post(self.url, body, self.headers, self.timeout, self.retries), self.url, "answers", "q"), options, self.url)
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """One named-question request per scene, in parallel."""
         return _map(lambda s: self._one(s, question, options), list(scenes), self.concurrency)
 
 
@@ -193,4 +194,5 @@ class OpenAICompatible:
         return normalize(scores)
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
+        """Letter probabilities from the top log-probabilities, one request per scene."""
         return _map(lambda s: self._one(s, question, options), list(scenes), self.concurrency)

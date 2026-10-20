@@ -98,6 +98,7 @@ class PromptInjection:
         return be.decode(ids[: lim // 3]) + "\n" + be.decode(ids[-(lim - lim // 3):])
 
     def scan(self, text: str) -> ScanResult:
+        """Injection probability of the text (full, per sentence or per chunk)."""
         if not text.strip():
             return ScanResult(self.name, text, True, 0.0)
         be, pos = self._load()
@@ -171,6 +172,7 @@ class ClaimDetector:
         return self.score(texts)
 
     def scan(self, text: str) -> ScanResult:
+        """Score the units, sentences and the whole text; report the smallest flagged pieces."""
         if not text.strip():
             return ScanResult(self.name, text, True, 0.0)
         a0 = len(text) - len(text.lstrip())

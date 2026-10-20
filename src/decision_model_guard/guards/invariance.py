@@ -77,6 +77,7 @@ class Invariance:
               *, raw_probs: Sequence[float] | None = None, **_ctx) -> GuardReport:
         # compare with the model's own answer on this scene: after the gate corrected a decision, the guarded answer
         # differs from what the model says on the scene by design, and that is not instability
+        """Ask again with other formats, option wordings and questions; flag changed answers."""
         base = argmax(list(raw_probs if raw_probs is not None else probs))
         changed, checks, calls = [], 0, 0
         variants = [(f, render(scene, f, self.trusted)) for f in self.formats]
