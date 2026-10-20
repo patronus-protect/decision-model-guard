@@ -28,6 +28,7 @@ from typing import Any
 from ..util import require
 
 log = logging.getLogger("decision_model_guard.server")
+ENDPOINTS = ("/v1/scan", "/v1/decide", "/v1/decide/batch")
 SERVER_KEYS = {"auth_token_env": str, "max_body_bytes": int, "max_scene_chars": int, "max_meta_bytes": int,
                "request_timeout": (int, float), "docs": bool}
 
@@ -118,6 +119,8 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
                           **({} if srv.get("docs", docs) else {"docs_url": None, "redoc_url": None, "openapi_url": None}))
     app.state.auth = token is not None
     log.info("authentication %s", "on (bearer token)" if token else "off: set DMGUARD_TOKEN or server.auth_token_env to require a token")
+    log.info("model %s; scanners %s; gate %s; guards %s", getattr(guard.model, "name", "?"), [x.name for x in guard.scanners] or "none",
+             "on" if guard.gate is not None else "off", [getattr(x, "name", type(x).__name__) for x in guard.guards] or "none")
 
     class Limits:
         """Auth and the body limit for /v1/*. The limit counts the bytes actually received, so chunked requests without a
@@ -129,6 +132,12 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
         async def __call__(self, scope, receive, send):
             if scope["type"] != "http" or not scope["path"].startswith("/v1/"):
                 return await self.inner(scope, receive, send)
+            path, outer = scope["path"], send
+
+            async def send(msg):                                  # dmguard_responses_total{endpoint, status}
+                if msg["type"] == "http.response.start":
+                    metrics[("responses", path if path in ENDPOINTS else "other", msg["status"])] += 1
+                await outer(msg)
             headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
             if token:
                 scheme, _, cred = headers.get("authorization", "").strip().partition(" ")
@@ -183,11 +192,15 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
 
     @app.get("/metrics", response_class=fastapi.responses.PlainTextResponse)
     def prom():
-        lines = ["# TYPE dmguard_requests_total counter"]
-        lines += [f'dmguard_requests_total{{endpoint="{k[9:]}"}} {v}' for k, v in sorted(metrics.items()) if k.startswith("requests:")]
+        lines = ["# TYPE dmguard_responses_total counter"]
+        lines += [f'dmguard_responses_total{{endpoint="{k[1]}",status="{k[2]}"}} {v}' for k, v in sorted(
+            ((k, v) for k, v in metrics.items() if isinstance(k, tuple)), key=lambda kv: (kv[0][1], kv[0][2]))]
+        lines += ["# TYPE dmguard_requests_total counter"]
+        named = sorted((k, v) for k, v in metrics.items() if isinstance(k, str))
+        lines += [f'dmguard_requests_total{{endpoint="{k[9:]}"}} {v}' for k, v in named if k.startswith("requests:")]
         lines += ["# TYPE dmguard_decisions_total counter"]
-        lines += [f'dmguard_decisions_total{{action="{k[7:]}"}} {v}' for k, v in sorted(metrics.items()) if k.startswith("action:")]
-        lines += [f"dmguard_unauthorized_total {metrics['unauthorized_total']}",
+        lines += [f'dmguard_decisions_total{{action="{k[7:]}"}} {v}' for k, v in named if k.startswith("action:")]
+        lines += ["# TYPE dmguard_unauthorized_total counter", f"dmguard_unauthorized_total {metrics['unauthorized_total']}",
                   "# TYPE dmguard_decision_latency_ms summary",
                   f"dmguard_decision_latency_ms_sum {latency['sum']:.3f}", f"dmguard_decision_latency_ms_count {latency['count']}"]
         return "\n".join(lines) + "\n"
@@ -203,6 +216,8 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
         metrics["requests:scan"] += 1
         if (body.text is None) == (body.scene is None):
             raise fastapi.HTTPException(422, "send either 'text' (untrusted text) or 'scene' (a scene with trusted blocks)")
+        if not (body.text if body.text is not None else body.scene).strip():
+            raise fastapi.HTTPException(422, "the text is empty")
         _limit(body.scene if body.scene is not None else body.text)
         return await _run(_scan, body)
 
@@ -217,6 +232,8 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
     def _check(b: DecideIn, where: str = "") -> None:
         """Request validation before any work: only these errors are 422; errors while deciding are server errors."""
         _limit(b.scene, b.meta)
+        if not b.scene.strip() or not b.question.strip():
+            raise fastapi.HTTPException(422, f"{where}scene and question must not be empty")
         try:
             check_decision(b.options, b.risky, b.order, b.fallback)
         except ValueError as e:

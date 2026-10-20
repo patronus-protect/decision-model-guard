@@ -12,7 +12,7 @@ config or a missing model stops the server at startup and `/readyz` answers only
 |---|---|---|---|
 | GET | `/healthz` | | `{"status": "ok"}` |
 | GET | `/readyz` | | `{"status": "ready"}` |
-| GET | `/metrics` | | Prometheus text: requests, decisions by action, latency sum and count |
+| GET | `/metrics` | | Prometheus text: responses by endpoint and status, requests, decisions by action, unauthorized requests, latency sum and count |
 | POST | `/v1/scan` | `{"text": ...}` (all of it untrusted, offsets into the text) or `{"scene": ...}` (trusted blocks are skipped) | sanitized text, `results_valid`, `results_score`, findings |
 | POST | `/v1/decide` | `scene`, `question`, `options`, optional `risky`, `order`, `fallback`, `meta`, `include_scene` | the guarded decision |
 | POST | `/v1/decide/batch` | `{"requests": [...]}` (up to 256) | `{"decisions": [...]}` |
@@ -40,3 +40,6 @@ together with `order`. A batch is checked completely before the first item is de
 (`requests[2]: ...`). Errors while deciding are server errors (500), and a model that returns invalid probabilities
 gives 502. In Python:
 `decision_model_guard.server.create_app(guard=..., config=..., auth_token=...)` returns the FastAPI app for your own ASGI server.
+
+The startup log names the model, the scanners, the gate and the guards, and whether authentication is on. With the
+models in the local Hugging Face cache, `HF_HUB_OFFLINE=1` skips the hub requests at startup (and in every CLI call).
