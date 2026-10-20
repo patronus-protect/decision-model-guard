@@ -127,3 +127,25 @@ def test_evaluate_reports_gate_effect():
     assert rep.attack_success_raw is not None and rep.attack_success_guarded is not None
     assert rep.attack_success_guarded <= rep.attack_success_raw
     assert "With Decision Model Guard" in rep.to_markdown()
+
+
+def test_jev_pytorch_path_pins_the_revision_and_asks_before_running_other_code(monkeypatch, tmp_path):
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    import huggingface_hub
+
+    from decision_model_guard.models import WolfDefenderJev
+    from decision_model_guard.models.wolf_defender_jev import REVISION
+    seen = {}
+    def fake(repo, revision=None, **kw):
+        seen.update(repo=repo, revision=revision)
+        raise RuntimeError("stop before downloading")
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", fake)
+    with pytest.raises(RuntimeError, match="stop"):
+        WolfDefenderJev.from_pretrained()
+    assert seen == {"repo": "patronus-studio/wolf-defender-jev", "revision": REVISION}
+    for other in ("some-org/some-repo", str(tmp_path)):                  # 0.1.2 ran their wolf_defender_jev.py without asking
+        with pytest.raises(ValueError, match="trust_remote_code"):
+            WolfDefenderJev.from_pretrained(other)
+    with pytest.raises(RuntimeError, match="stop"):
+        WolfDefenderJev.from_pretrained("some-org/some-repo", trust_remote_code=True)

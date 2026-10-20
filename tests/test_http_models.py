@@ -77,3 +77,11 @@ def test_retries_then_error(server):
     m = SystemOneHTTP(server + "/flaky", retries=1, timeout=5)
     with pytest.raises(RuntimeError, match="HTTP 503"):
         m.decide_batch(["x"], "q", ["a", "b"])
+
+
+def test_openai_key_goes_only_to_openai(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    assert "Authorization" not in OpenAICompatible("http://my-vllm.internal/v1", "m").headers          # 0.1.2 sent the key there
+    assert OpenAICompatible("https://api.openai.com/v1", "m").headers["Authorization"] == "Bearer sk-test"
+    monkeypatch.setenv("VLLM_KEY", "v")
+    assert OpenAICompatible("http://my-vllm.internal/v1", "m", api_key_env="VLLM_KEY").headers["Authorization"] == "Bearer v"

@@ -8,11 +8,14 @@ scene. The gate sends the original and all variants in one call, so batching ins
 ```python
 from decision_model_guard.models import WolfDefenderJev
 model = WolfDefenderJev.from_pretrained()                       # patronus-studio/wolf-defender-jev, CPU by default
-model = WolfDefenderJev.from_pretrained("/path/to/folder", device="cuda")
+model = WolfDefenderJev.from_pretrained("/path/to/folder", device="cuda", trust_remote_code=True)
 ```
 
-The repository ships its own model code (`wolf_defender_jev.py`), which is imported from the downloaded folder. Batches
-are cut by a token budget (`max_tokens=8192`, `max_sq=8e6`), so long scenes run alone and memory stays bounded.
+The repository ships its own model code (`wolf_defender_jev.py`), which the PyTorch path imports from the downloaded
+folder and runs. For `patronus-studio/wolf-defender-jev` the revision is pinned to the one this release was tested with
+(`decision_model_guard.models.wolf_defender_jev.REVISION`; pass `revision=` to choose another); any other repository or
+a local folder needs `trust_remote_code=True`. The ONNX path below runs no code from the repository. Batches are cut by
+a token budget (`max_tokens=8192`, `max_sq=8e6`), so long scenes run alone and memory stays bounded.
 
 On ONNX Runtime, without torch (`pip install "decision-model-guard[onnx]"`):
 
@@ -57,7 +60,8 @@ model = HFClassifier("patronus-studio/wolf-defender-prompt-injection-small")   #
 ## Credentials
 
 HTTP adapters read keys from the environment variable you name (`api_key_env`) and never log them or echo response
-bodies in errors.
+bodies in errors. `OpenAICompatible` without `api_key_env` sends `OPENAI_API_KEY` only to `api.openai.com`; for any
+other server, name the variable explicitly.
 
 ## Cloudflare Workers AI: Clef
 

@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from ..util import pick_device, require
 
 REPO = "patronus-studio/wolf-defender-jev"
+REVISION = "5ed7c44d8ee16b0c517952ad58e264e00ec7bbac"    # the PyTorch path runs the repository's code: pinned for REPO
 
 
 def _load_class(folder: str):
@@ -43,11 +44,20 @@ class WolfDefenderJev:
 
     @classmethod
     def from_pretrained(cls, repo_or_path: str = REPO, device: str | None = None, revision: str | None = None, onnx: str | None = None,
-                        **kw):
+                        trust_remote_code: bool = False, **kw):
         """PyTorch model, or with `onnx` ("fp32", "fp16", "mixed", "int8_int4_embeddings" or a path to an .onnx file) the
-        ONNX Runtime adapter WolfDefenderJevONNX (keyword arguments: threads, providers, max_tokens, max_sq)."""
+        ONNX Runtime adapter WolfDefenderJevONNX (keyword arguments: threads, providers, max_tokens, max_sq).
+
+        The PyTorch path imports and runs `wolf_defender_jev.py` from the model folder. For the default repository the
+        revision is pinned (REVISION); any other repository or a local folder needs `trust_remote_code=True`. The ONNX
+        path runs no code from the repository."""
         if onnx is not None:
             return WolfDefenderJevONNX.from_pretrained(repo_or_path, onnx, revision=revision, **kw)
+        if repo_or_path != REPO and not trust_remote_code:
+            raise ValueError(f"{repo_or_path!r} would run its own wolf_defender_jev.py: pass trust_remote_code=True if you trust it, "
+                             "or use onnx=... (no code from the repository)")
+        if repo_or_path == REPO and revision is None:
+            revision = REVISION
         try:                                                  # before downloading 600 MB of PyTorch weights
             require("torch", "hf")
             require("transformers", "hf")

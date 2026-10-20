@@ -6,6 +6,7 @@ import math
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -80,15 +81,20 @@ class SystemOneHTTP:
 class OpenAICompatible:
     """An LLM judge behind an OpenAI-compatible chat completions endpoint (vLLM, llama.cpp server, Ollama, LM Studio,
     hosted APIs). The options are listed with letters; the probabilities come from the top log-probabilities of the
-    first answer token. Servers without log-probabilities fall back to a one-hot answer."""
+    first answer token. Servers without log-probabilities fall back to a one-hot answer.
+
+    `api_key_env` names the environment variable with the API key. Without it, OPENAI_API_KEY is sent only to
+    api.openai.com, never to another host."""
 
     name = "openai-compatible"
     SYSTEM = "You are a decision model. Read the input and answer the question with the letter of exactly one option."
 
-    def __init__(self, base_url: str, model: str, api_key_env: str | None = "OPENAI_API_KEY", headers: dict | None = None,
+    def __init__(self, base_url: str, model: str, api_key_env: str | None = None, headers: dict | None = None,
                  timeout: float = 60.0, retries: int = 2, concurrency: int = 4, top_logprobs: int = 20, system_prompt: str | None = None):
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.model, self.timeout, self.retries, self.concurrency, self.top = model, timeout, retries, concurrency, top_logprobs
+        if api_key_env is None and urllib.parse.urlsplit(self.url).hostname == "api.openai.com":
+            api_key_env = "OPENAI_API_KEY"
         self.headers = _auth_headers(headers, api_key_env)
         self.system = system_prompt or self.SYSTEM
 
