@@ -35,11 +35,10 @@ def cmd_init(args) -> int:
 
 
 def cmd_scan(args) -> int:
+    from .pipeline import scan_text
     g = _guard(args)
     text = _read(args)
-    if not text.lstrip().startswith("["):
-        text = f"[USER PROMPT]\n{text}"
-    sanitized, results = g.scan(text)
+    sanitized, results = g.scan(text) if args.scene else scan_text(text, g.scanners)   # text: one untrusted block
     out = {"valid": all(r.valid for r in results), "results": [r.to_dict() for r in results]}
     if args.sanitized:
         out["sanitized"] = sanitized
@@ -141,6 +140,8 @@ def main(argv: list[str] | None = None) -> int:
             q.add_argument("--file")
         if name == "scan":
             q.add_argument("--sanitized", action="store_true", help="also print the sanitized text")
+            q.add_argument("--scene", action="store_true", help="parse the input as a scene: trusted blocks are not scanned "
+                           "(default: the whole input is untrusted text)")
         if name == "decide":
             q.add_argument("--question", required=True)
             q.add_argument("--option", action="append", required=True)

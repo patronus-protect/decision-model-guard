@@ -6,7 +6,7 @@ Endpoints:
     GET  /healthz            liveness
     GET  /readyz             the guard is built
     GET  /metrics            Prometheus text format
-    POST /v1/scan            {"text": "..."} or {"scene": "..."} -> scanner results and the sanitized text
+    POST /v1/scan            {"text": "..."} (all untrusted) or {"scene": "..."} -> scanner results and the sanitized text
     POST /v1/decide          one guarded decision
     POST /v1/decide/batch    {"requests": [...]} -> list of guarded decisions
 
@@ -29,6 +29,7 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
     import yaml
 
     from ..config import build_guard
+    from ..pipeline import scan_text
     cfg: dict[str, Any] = {}
     if isinstance(config, str):
         with open(config, encoding="utf-8") as fh:
@@ -108,12 +109,9 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
     def scan(body: ScanIn):
         metrics["requests:scan"] += 1
         g = get_guard()
-        text = body.scene if body.scene is not None else body.text
-        if text is None:
-            raise fastapi.HTTPException(422, "send 'text' or 'scene'")
-        if body.scene is None and "[" not in text:
-            text = f"[USER PROMPT]\n{text}"
-        sanitized, results = g.scan(text)
+        if (body.text is None) == (body.scene is None):
+            raise fastapi.HTTPException(422, "send either 'text' (untrusted text) or 'scene' (a scene with trusted blocks)")
+        sanitized, results = g.scan(body.scene) if body.scene is not None else scan_text(body.text, g.scanners)
         return {"sanitized": sanitized, "valid": all(r.valid for r in results), "results_valid": {r.scanner: r.valid for r in results},
                 "results_score": {r.scanner: round(r.score, 6) for r in results}, "results": [r.to_dict() for r in results]}
 

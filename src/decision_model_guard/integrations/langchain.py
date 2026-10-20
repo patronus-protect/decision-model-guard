@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..pipeline import DecisionGuard
+from ..scene import Scene
 from ..util import require
 
 
@@ -20,12 +21,16 @@ def as_runnable(guard: DecisionGuard, include_scene: bool = False):
     return core.RunnableLambda(_run, name="Decision Model Guard")
 
 
-def decision_tool(guard: DecisionGuard, question: str, options: list[str], name: str = "guarded_decision", **decide_kw):
-    """A LangChain tool that takes untrusted text and returns the guarded answer for a fixed question."""
+def decision_tool(guard: DecisionGuard, question: str, options: list[str], name: str = "guarded_decision", context: str | None = None,
+                  **decide_kw):
+    """A LangChain tool that takes untrusted text and returns the guarded answer for a fixed question. The input is always
+    one untrusted block (header-looking lines in it are neutralized); `context` is trusted application context placed
+    before it. To pass a whole scene, use `as_runnable`."""
     tools = require("langchain_core.tools", "langchain")
 
     def _tool(text: str) -> str:
-        d = guard.decide(text if text.lstrip().startswith("[") else f"[USER PROMPT]\n{text}", question, options, **decide_kw)
+        sc = Scene().system(context) if context else Scene()
+        d = guard.decide(sc.user(text), question, options, **decide_kw)
         return f"{d.answer} (action: {d.action.value})"
 
     _tool.__doc__ = f"{question} Options: {', '.join(options)}. Input: the untrusted text."

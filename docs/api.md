@@ -12,7 +12,7 @@ The guard is built on the first request (`GET /readyz` builds it eagerly).
 | GET | `/healthz` | | `{"status": "ok"}` |
 | GET | `/readyz` | | builds the guard, `{"status": "ready"}` |
 | GET | `/metrics` | | Prometheus text: requests, decisions by action, latency sum and count |
-| POST | `/v1/scan` | `{"text": ...}` or `{"scene": ...}` | sanitized text, `results_valid`, `results_score`, findings |
+| POST | `/v1/scan` | `{"text": ...}` (all of it untrusted, offsets into the text) or `{"scene": ...}` (trusted blocks are skipped) | sanitized text, `results_valid`, `results_score`, findings |
 | POST | `/v1/decide` | `scene`, `question`, `options`, optional `risky`, `order`, `fallback`, `meta`, `include_scene` | the guarded decision |
 | POST | `/v1/decide/batch` | `{"requests": [...]}` (up to 256) | `{"decisions": [...]}` |
 
