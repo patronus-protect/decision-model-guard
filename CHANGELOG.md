@@ -27,3 +27,7 @@ First release.
 - Robustness audit: `decision_model_guard.evaluate.audit` and `dmguard audit` with ten checks (claim, split claim, forged
   block, verdict token, look-alike letters, padding, format, option wording, option order, neutral controls), a
   scorecard with and without the guard, and `--max-attack-success` for CI.
+- `ExtractionGuard` for extraction models: erases flagged claims before trusting extracted values, reports values taken
+  from flagged text, optional erase-and-check with a cautious direction; `evaluate_extraction` with twelve bundled cases.
+- Cloudflare Workers AI adapters: `Clef` (decision model) and `Clairic` (extraction model), REST or proxy; config type
+  `clef`.

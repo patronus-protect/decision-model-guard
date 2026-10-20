@@ -17,6 +17,7 @@ plus an action. `dmguard audit` measures how robust your model is with and witho
 from .audit import AuditLogger
 from .calibration import Calibrated, Calibrator
 from .config import build_guard
+from .extraction import ExtractionGuard, GuardedExtraction
 from .guards import Confidence, Conformal, Coverage, Invariance, OptionOrder, SteeringGate
 from .models import DecisionModel, FunctionModel
 from .pipeline import BOUNDARY_NOTE, DecisionGuard, Request, guard_decision, scan_content
@@ -26,5 +27,5 @@ from .types import Action, Finding, GuardedDecision, GuardReport, Kind, ScanResu
 from .version import __version__
 
 __all__ = ["__version__", "DecisionGuard", "Request", "guard_decision", "scan_content", "build_guard", "Policy", "AuditLogger",
-           "SteeringGate", "OptionOrder", "Confidence", "Coverage", "Invariance", "Conformal", "Calibrator", "Calibrated", "Scene", "TRUSTED_HEADERS", "parse_blocks", "units", "DecisionModel",
+           "SteeringGate", "OptionOrder", "Confidence", "Coverage", "Invariance", "Conformal", "Calibrator", "Calibrated", "ExtractionGuard", "GuardedExtraction", "Scene", "TRUSTED_HEADERS", "parse_blocks", "units", "DecisionModel",
            "FunctionModel", "Action", "Kind", "Finding", "ScanResult", "GuardReport", "GuardedDecision", "BOUNDARY_NOTE"]

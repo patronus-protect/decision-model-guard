@@ -1,0 +1,9 @@
+{
+  // A Worker with an AI binding that forwards POST /run/<model> to Workers AI. Run it locally with `npx wrangler dev`
+  // (it uses your wrangler login, no API token in the SDK) or deploy it behind Cloudflare Access.
+  // Then: Clef(proxy_url="http://127.0.0.1:8787/run"), Clairic(proxy_url="http://127.0.0.1:8787/run")
+  "name": "dmguard-workers-ai-proxy",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-01",
+  "ai": { "binding": "AI" }
+}

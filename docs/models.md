@@ -58,3 +58,14 @@ model = HFClassifier("patronus-studio/wolf-defender-prompt-injection-small")   #
 
 HTTP adapters read keys from the environment variable you name (`api_key_env`) and never log them or echo response
 bodies in errors.
+
+## Cloudflare Workers AI: Clef
+
+```python
+from decision_model_guard.models import Clef
+model = Clef(variant="clef")                                   # CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
+model = Clef(variant="clef-flash", proxy_url="http://127.0.0.1:8787/run")   # a Worker with an AI binding
+```
+
+Options become choice criteria; one request per scene, `concurrency=8` in parallel. The extraction model `Clairic`
+lives next to it; see [extraction.md](extraction.md).

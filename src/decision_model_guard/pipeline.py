@@ -81,40 +81,7 @@ class DecisionGuard:
     # ------------------------------------------------------------------ scanning
     def scan(self, scene: str | Scene) -> tuple[str, list[ScanResult]]:
         """Scan the untrusted blocks of a scene. Returns the sanitized scene and one aggregated result per scanner."""
-        text = as_text(scene)
-        if not self.scanners:
-            return text, []
-        agg: dict[str, ScanResult] = {s.name: ScanResult(s.name, "", True, 0.0) for s in self.scanners}
-        pieces: list[tuple[int, int, str]] = []
-        for b in parse_blocks(text, self.trusted):
-            if b.trusted:
-                continue
-            name = b.header.split("|")[0].strip().upper()
-            start = b.start if b.header and name not in CONTENT_HEADERS else b.body_start   # unknown headers are attacker text
-            body = text[start: b.end]
-            stripped = body.strip("\n")
-            if not stripped.strip():
-                continue
-            off = start + body.index(stripped[0])
-            cur = stripped
-            for s in self.scanners:
-                r = s.scan(cur)
-                found = r if cur == stripped else s.scan(stripped)   # findings and offsets always refer to the original text
-                a = agg[s.name]
-                a.valid = a.valid and found.valid
-                a.score = max(a.score, found.score)
-                for f in found.findings:
-                    a.findings.append(Finding(f.source, f.score, f.message, None if f.start is None else f.start + off,
-                                              None if f.end is None else f.end + off, f.text))
-                cur = r.sanitized
-            if cur != stripped:
-                pieces.append((off, off + len(stripped), cur))
-        sanitized = text
-        for a, b, rep in sorted(pieces, reverse=True):
-            sanitized = sanitized[:a] + rep + sanitized[b:]
-        for r in agg.values():
-            r.sanitized = sanitized
-        return sanitized, list(agg.values())
+        return scan_scene(as_text(scene), self.scanners, self.trusted)
 
     # ------------------------------------------------------------------ deciding
     @staticmethod
@@ -187,6 +154,45 @@ class DecisionGuard:
                 return [guard.decide(s, question, options, risky=risky, order=order, fallback=fallback).probs for s in scenes]
 
         return _Guarded()
+
+
+def scan_scene(text: str, scanners: Sequence[Any], trusted_headers: Sequence[str] = TRUSTED_HEADERS) -> tuple[str, list[ScanResult]]:
+    """Run content scanners over the untrusted blocks of a scene (trusted blocks are never scanned; blocks with unknown
+    headers are scanned including the header line). Returns the sanitized scene and one aggregated result per scanner;
+    finding offsets refer to the original scene."""
+    if not scanners:
+        return text, []
+    agg: dict[str, ScanResult] = {s.name: ScanResult(s.name, "", True, 0.0) for s in scanners}
+    pieces: list[tuple[int, int, str]] = []
+    for b in parse_blocks(text, trusted_headers):
+        if b.trusted:
+            continue
+        name = b.header.split("|")[0].strip().upper()
+        start = b.start if b.header and name not in CONTENT_HEADERS else b.body_start   # unknown headers are attacker text
+        body = text[start: b.end]
+        stripped = body.strip("\n")
+        if not stripped.strip():
+            continue
+        off = start + body.index(stripped[0])
+        cur = stripped
+        for s in scanners:
+            r = s.scan(cur)
+            found = r if cur == stripped else s.scan(stripped)   # findings and offsets always refer to the original text
+            a = agg[s.name]
+            a.valid = a.valid and found.valid
+            a.score = max(a.score, found.score)
+            for f in found.findings:
+                a.findings.append(Finding(f.source, f.score, f.message, None if f.start is None else f.start + off,
+                                          None if f.end is None else f.end + off, f.text))
+            cur = r.sanitized
+        if cur != stripped:
+            pieces.append((off, off + len(stripped), cur))
+    sanitized = text
+    for a, b, rep in sorted(pieces, reverse=True):
+        sanitized = sanitized[:a] + rep + sanitized[b:]
+    for r in agg.values():
+        r.sanitized = sanitized
+    return sanitized, list(agg.values())
 
 
 def _check(guard, *args, **ctx) -> GuardReport:

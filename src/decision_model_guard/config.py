@@ -1,7 +1,7 @@
 """Build a DecisionGuard from a YAML or dict config.
 
     model:
-      type: wolf_defender_jev            # wolf_defender_jev | systemone_http | openai_compatible | causal_lm | hf_classifier | callable
+      type: wolf_defender_jev            # wolf_defender_jev | clef | systemone_http | openai_compatible | causal_lm | hf_classifier | callable
       device: cpu
       # onnx: int8_int4_embeddings       # ONNX Runtime instead of PyTorch: fp32 | fp16 | mixed | int8_int4_embeddings
     scanners:
@@ -54,7 +54,7 @@ from . import input_scanners as S
 from .audit import AuditLogger
 from .calibration import Calibrated, Calibrator
 from .guards import Confidence, Conformal, Coverage, Invariance, OptionOrder, SteeringGate
-from .models import CausalLMJudge, DecisionModel, HFClassifier, OpenAICompatible, SystemOneHTTP, WolfDefenderJev, as_model
+from .models import CausalLMJudge, Clef, DecisionModel, HFClassifier, OpenAICompatible, SystemOneHTTP, WolfDefenderJev, as_model
 from .pipeline import DecisionGuard
 from .policy import Policy
 
@@ -85,6 +85,8 @@ def build_model(cfg: dict[str, Any]) -> DecisionModel:
         return WolfDefenderJev.from_pretrained(cfg.pop("repo", "patronus-studio/wolf-defender-jev"), **cfg)
     if t == "systemone_http":
         return SystemOneHTTP(**cfg)
+    if t == "clef":                           # Cloudflare Workers AI: variant clef | clef-flash, account_id / proxy_url
+        return Clef(**cfg)
     if t == "openai_compatible":
         return OpenAICompatible(**cfg)
     if t == "causal_lm":
