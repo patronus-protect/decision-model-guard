@@ -15,12 +15,13 @@ keywords = ["ai-security", "prompt-injection", "decision-steering", "guardrails"
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Security",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Typing :: Typed",
@@ -44,6 +45,7 @@ Homepage = "https://patronus.studio"
 Repository = "https://github.com/patronus-protect/decision-model-guard"
 Issues = "https://github.com/patronus-protect/decision-model-guard/issues"
 Changelog = "https://github.com/patronus-protect/decision-model-guard/blob/main/CHANGELOG.md"
+Security = "https://github.com/patronus-protect/decision-model-guard/security/policy"
 Documentation = "https://github.com/patronus-protect/decision-model-guard/tree/main/docs"
 "Claim detector" = "https://huggingface.co/patronus-studio/decision-steering-gate"
 
@@ -54,7 +56,8 @@ path = "src/decision_model_guard/version.py"
 packages = ["src/decision_model_guard"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/decision_model_guard", "tests", "docs", "examples", "README.md", "LICENSE", "CHANGELOG.md"]
+include = ["src/decision_model_guard", "tests", "docs", "examples", "scripts", "README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md",
+           "CONTRIBUTING.md", "CITATION.cff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
