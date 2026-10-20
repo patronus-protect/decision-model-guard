@@ -65,6 +65,10 @@ class DecisionGuard:
         self.policy, self.audit, self.use_sanitized = policy or Policy(), audit, use_sanitized
         self.boundary_note = BOUNDARY_NOTE if boundary_note is True else (boundary_note or None)
         self.trusted = tuple(trusted_headers)
+        names = [s.name for s in self.scanners]
+        unknown = [n for n in self.policy.block_scanners if n not in names]
+        if unknown:                                              # a typo here would silently never block
+            raise ValueError(f"policy.block_scanners names {unknown}, which are not among the scanners {names}")
 
     @classmethod
     def default(cls, model: DecisionModel | DecideBatch, device: str | None = None, detector_threshold: float = 0.3,
@@ -93,29 +97,14 @@ class DecisionGuard:
         return scan_scene(scene, self.scanners, self.trusted)
 
     # ------------------------------------------------------------------ deciding
-    @staticmethod
-    def _kind(risky, order, kind) -> Kind:
-        if kind is not None:
-            return Kind(kind)
-        if risky:
-            return Kind.RISKY
-        if order:
-            return Kind.ORDERED
-        return Kind.UNORDERED
 
     def decide(self, scene: str | Scene, question: str, options: Sequence[str], *, risky: Iterable[int] | None = None,
                order: Sequence[int] | None = None, fallback: int | None = None, kind: str | Kind | None = None,
                meta: dict[str, Any] | None = None) -> GuardedDecision:
         t0 = time.perf_counter()
-        options = list(options)
-        if len(options) < 2:
-            raise ValueError("a decision needs at least two options")
-        risky = sorted(set(risky)) if risky else None
-        order = list(order) if order else None
-        for idx in (risky or []) + (order or []) + ([fallback] if fallback is not None else []):
-            if not 0 <= idx < len(options):
-                raise ValueError(f"option index {idx} out of range")
-        k = self._kind(risky, order, kind)
+        options, risky, order, k = check_decision(options, risky, order, fallback, kind)
+        if fallback is None and self.policy.fallback_option is not None and not 0 <= self.policy.fallback_option < len(options):
+            raise ValueError(f"policy.fallback_option {self.policy.fallback_option} is out of range for {len(options)} options")
         text, blocks = scene_blocks(scene, self.trusted)
         sanitized, sblocks, scans = _scan(text, blocks, self.scanners)
         model_scene, model_blocks = (sanitized, sblocks) if self.use_sanitized else (text, blocks)
@@ -163,6 +152,36 @@ class DecisionGuard:
                 return [guard.decide(s, question, options, risky=risky, order=order, fallback=fallback).probs for s in scenes]
 
         return _Guarded()
+
+
+def check_decision(options: Sequence[str], risky: Iterable[int] | None = None, order: Sequence[int] | None = None,
+                   fallback: int | None = None, kind: str | Kind | None = None) -> tuple[list[str], list[int] | None, list[int] | None, Kind]:
+    """Validate the arguments of a decision; returns (options, risky, order, kind). Raises ValueError for fewer than two
+    options, empty or duplicate options, indices out of range, a `risky` set that holds every option, an `order` that is
+    not a permutation of all options, `risky` together with `order`, and a `kind` that contradicts them."""
+    options = list(options)
+    if len(options) < 2:
+        raise ValueError("a decision needs at least two options")
+    if not all(isinstance(o, str) and o.strip() for o in options) or len(set(options)) != len(options):
+        raise ValueError("options must be distinct, non-empty strings")
+    n = len(options)
+    ok = lambda i: isinstance(i, int) and not isinstance(i, bool) and 0 <= i < n  # noqa: E731
+    risky = list(risky) if risky is not None else None
+    order = list(order) if order is not None else None
+    for name, idx in (("risky", risky or []), ("order", order or []), ("fallback", [] if fallback is None else [fallback])):
+        bad = [i for i in idx if not ok(i)]
+        if bad:
+            raise ValueError(f"{name}: option index {bad[0]!r} out of range (0 to {n - 1})")
+    if risky is not None and (not risky or len(set(risky)) == n):
+        raise ValueError("risky must name at least one option and leave at least one out")
+    if order is not None and sorted(order) != list(range(n)):
+        raise ValueError(f"order must list every option index from 0 to {n - 1} once, most cautious first")
+    if risky and order:
+        raise ValueError("pass risky or order, not both")
+    k = Kind.RISKY if risky else Kind.ORDERED if order else Kind.UNORDERED
+    if kind is not None and Kind(kind) != k:
+        raise ValueError(f"kind={Kind(kind).value!r} needs " + {"risky": "risky=...", "ordered": "order=..."}.get(Kind(kind).value, "neither risky nor order"))
+    return options, sorted(set(risky)) if risky else None, order, k
 
 
 def scan_scene(scene: str | Scene, scanners: Sequence[Any], trusted_headers: Sequence[str] = TRUSTED_HEADERS) -> tuple[str, list[ScanResult]]:

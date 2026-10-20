@@ -53,6 +53,7 @@
 from __future__ import annotations
 
 import copy
+import difflib
 import importlib
 import os
 import sys
@@ -73,6 +74,45 @@ from .policy import Policy
 SCANNERS = {c.__name__: c for c in (S.InvisibleText, S.ForgedTrustBlock, S.VerdictTokens, S.Regex, S.BanSubstrings, S.TokenLimit,
                                      S.PromptInjection, S.ClaimDetector)}
 GUARDS = {"Confidence": Confidence, "OptionOrder": OptionOrder, "Coverage": Coverage, "Invariance": Invariance, "Conformal": Conformal}
+MODELS = ("wolf_defender_jev", "clef", "systemone_http", "openai_compatible", "causal_lm", "hf_classifier", "callable")
+TOP_LEVEL = {"model": dict, "scanners": list, "gate": (dict, bool, type(None)), "guards": list, "calibration": (str, type(None)),
+             "policy": dict, "audit": (dict, type(None)), "server": (dict, type(None)), "use_sanitized": bool,
+             "boundary_note": (bool, str, type(None))}
+
+
+def _close(name: str, allowed) -> str:
+    hit = difflib.get_close_matches(name, list(allowed), n=1)
+    return f" (did you mean {hit[0]!r}?)" if hit else ""
+
+
+def check_config(cfg: Any) -> dict[str, Any]:
+    """Raise ValueError for unknown top-level keys and sections of the wrong type: a typo must not remove protection."""
+    if not isinstance(cfg, dict):
+        raise ValueError("a config must be a mapping of sections (model, scanners, gate, ...)")
+    for k, v in cfg.items():
+        if k not in TOP_LEVEL:
+            raise ValueError(f"unknown config key {k!r}{_close(k, TOP_LEVEL)}; allowed: {list(TOP_LEVEL)}")
+        if not isinstance(v, TOP_LEVEL[k]):
+            raise ValueError(f"'{k}' has the wrong type ({type(v).__name__})")
+        if k in ("scanners", "guards") and not all(isinstance(x, dict) and "type" in x for x in v):
+            raise ValueError(f"every entry of '{k}' needs a 'type'")
+    from .server.app import server_settings
+    server_settings(cfg)
+    return cfg
+
+
+def load_config(config: dict[str, Any] | str | Path) -> dict[str, Any]:
+    """A config dict from a dict or a YAML file, checked with `check_config`."""
+    if isinstance(config, (str, Path)):
+        config = yaml.safe_load(Path(config).read_text(encoding="utf-8-sig")) or {}
+    return check_config(copy.deepcopy(config))
+
+
+def _make(where: str, cls, kw: dict[str, Any]):
+    try:
+        return cls(**kw)
+    except TypeError as e:                                       # unknown or missing parameters
+        raise ValueError(f"{where}: {e}") from None
 
 
 def _import(target: str):
@@ -85,67 +125,77 @@ def _import(target: str):
 
 
 def build_model(cfg: dict[str, Any]) -> DecisionModel:
+    """A decision model from the `model:` section."""
+    if not isinstance(cfg, dict) or "type" not in cfg:
+        raise ValueError(f"the model section needs a 'type': one of {list(MODELS)}")
     cfg = dict(cfg)
     t = cfg.pop("type")
     if t == "callable":                       # your own model: a decide_batch function, or a class/factory returning a model
+        if "target" not in cfg:
+            raise ValueError("model type callable needs target: 'package.module:name'")
         obj = _import(cfg.pop("target"))
         name = cfg.pop("name", None)
         if isinstance(obj, type) or cfg:
-            obj = obj(**cfg)
+            obj = _make("model", obj, cfg)
         return as_model(obj, name=name)
     if t == "wolf_defender_jev":
-        return WolfDefenderJev.from_pretrained(cfg.pop("repo", "patronus-studio/wolf-defender-jev"), **cfg)
-    if t == "systemone_http":
-        return SystemOneHTTP(**cfg)
-    if t == "clef":                           # Cloudflare Workers AI: variant clef | clef-flash, account_id / proxy_url
-        return Clef(**cfg)
-    if t == "openai_compatible":
-        return OpenAICompatible(**cfg)
-    if t == "causal_lm":
-        return CausalLMJudge(**cfg)
-    if t == "hf_classifier":
-        return HFClassifier(**cfg)
-    raise ValueError(f"unknown model type {t!r}")
+        repo = cfg.pop("repo", "patronus-studio/wolf-defender-jev")
+        try:
+            return WolfDefenderJev.from_pretrained(repo, **cfg)
+        except TypeError as e:
+            raise ValueError(f"model: {e}") from None
+    classes = {"systemone_http": SystemOneHTTP, "clef": Clef, "openai_compatible": OpenAICompatible, "causal_lm": CausalLMJudge,
+               "hf_classifier": HFClassifier}
+    if t not in classes:
+        raise ValueError(f"unknown model type {t!r}{_close(str(t), MODELS)}; available: {list(MODELS)}")
+    return _make("model", classes[t], cfg)
 
 
 def build_scanner(cfg: dict[str, Any]):
+    """A content scanner from one entry of `scanners:`."""
     cfg = dict(cfg)
     t = cfg.pop("type")
     if t not in SCANNERS:
-        raise ValueError(f"unknown scanner {t!r}; available: {sorted(SCANNERS)}")
-    return SCANNERS[t](**cfg)
+        raise ValueError(f"unknown scanner {t!r}{_close(str(t), SCANNERS)}; available: {sorted(SCANNERS)}")
+    return _make(f"scanner {t}", SCANNERS[t], cfg)
+
+
+def build_scanners(config: dict[str, Any] | str | Path) -> list[Any]:
+    """Only the scanners of a config (what `dmguard scan` needs), without loading the decision model."""
+    return [build_scanner(x) for x in load_config(config).get("scanners", [])]
 
 
 def build_guard(config: dict[str, Any] | str | Path, model: DecisionModel | None = None) -> DecisionGuard:
-    """DecisionGuard from a config dict or a YAML file path. Pass `model` to override the configured model."""
-    if isinstance(config, (str, Path)):
-        config = yaml.safe_load(Path(config).read_text())
-    cfg = copy.deepcopy(config or {})
-    m = model if model is not None else build_model(cfg["model"]) if "model" in cfg else None
-    if m is None:
+    """DecisionGuard from a config dict or a YAML file path. Pass `model` to override the configured model. Unknown keys
+    and wrong types raise ValueError before any model is loaded."""
+    cfg = load_config(config)
+    if model is None and "model" not in cfg:
         raise ValueError("config needs a 'model' section (or pass model=...)")
-    calibrator = Calibrator.load(cfg["calibration"]) if cfg.get("calibration") else None
-    if calibrator is not None:                                   # calibrated probabilities everywhere in the pipeline
-        m = Calibrated(m, calibrator)
+    policy = _make("policy", Policy, cfg.get("policy", {}))
     scanners = [build_scanner(s) for s in cfg.get("scanners", [])]
+    names = [x.name for x in scanners]
+    unknown = [n for n in policy.block_scanners if n not in names]
+    if unknown:
+        raise ValueError(f"policy.block_scanners names {unknown}, which are not among the configured scanners {names}")
+    calibrator = Calibrator.load(cfg["calibration"]) if cfg.get("calibration") else None
     gate = None
     if cfg.get("gate") is not False:
-        g = dict(cfg.get("gate") or {})
+        g = dict(cfg["gate"]) if isinstance(cfg.get("gate"), dict) else {}      # gate: true or no section: the default gate
         if g.get("selector") == "detector":
-            det = next((s for s in scanners if isinstance(s, S.ClaimDetector)), None)
+            det = next((x for x in scanners if isinstance(x, S.ClaimDetector)), None)
             if det is None:
                 extra = {k: g[k] for k in ("device", "onnx") if k in g}
                 det = S.ClaimDetector(threshold=g.get("threshold", 0.3), **extra)
             g["detector"] = det
         g.pop("device", None)
         g.pop("onnx", None)
-        gate = SteeringGate(**g)
+        gate = _make("gate", SteeringGate, g)
     guards = []
     for gc in cfg.get("guards", []):
         gc = dict(gc)
         t = gc.pop("type")
         if t not in GUARDS:
-            raise ValueError(f"unknown guard {t!r}; available: {sorted(GUARDS)}")
+            raise ValueError(f"unknown guard {t!r}{_close(str(t), GUARDS)}; available: {sorted(GUARDS)}")
         if t == "Conformal":
             src = gc.pop("calibration", None)
             if src is None and calibrator is None:
@@ -153,9 +203,11 @@ def build_guard(config: dict[str, Any] | str | Path, model: DecisionModel | None
             gc["calibrator"] = Calibrator.load(src) if src else calibrator
         if t == "Coverage" and gc.get("gate") is True:            # erase-and-check inside every window with the configured gate
             gc["gate"] = gate
-        guards.append(GUARDS[t](**gc))
-    policy = Policy(**cfg.get("policy", {}))
-    audit = AuditLogger(**cfg["audit"]) if cfg.get("audit") else None
+        guards.append(_make(f"guard {t}", GUARDS[t], gc))
+    audit = _make("audit", AuditLogger, cfg["audit"]) if cfg.get("audit") else None
+    m = model if model is not None else build_model(cfg["model"])
+    if calibrator is not None:                                   # calibrated probabilities everywhere in the pipeline
+        m = Calibrated(m, calibrator)
     return DecisionGuard(m, scanners=scanners, gate=gate, guards=guards, policy=policy, audit=audit,
                          use_sanitized=cfg.get("use_sanitized", True), boundary_note=cfg.get("boundary_note"))
 

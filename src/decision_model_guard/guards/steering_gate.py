@@ -64,6 +64,10 @@ class SteeringGate:
             raise ValueError("selector='detector' needs a detector (for example input_scanners.ClaimDetector())")
         if scope not in ("all", "unordered") or mode not in ("erase", "trigger") or rule not in ("absolute", "delta", "gap"):
             raise ValueError("scope in {all, unordered}, mode in {erase, trigger}, rule in {absolute, delta, gap}")
+        if window < 1 or max_variants < 1:
+            raise ValueError("window and max_variants must be at least 1")
+        if not 0 <= threshold <= 1:
+            raise ValueError("threshold must be between 0 and 1")
         self.window, self.max_variants, self.selector, self.detector = window, max_variants, selector, detector
         self.threshold, self.scope, self.mode, self.rule, self.delta = threshold, scope, mode, rule, delta
         self.override = risk_threshold if override is None else override

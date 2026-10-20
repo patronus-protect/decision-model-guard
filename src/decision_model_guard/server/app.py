@@ -70,15 +70,9 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
     from starlette.concurrency import run_in_threadpool
     from starlette.responses import JSONResponse
 
-    from ..config import build_guard
+    from ..config import build_guard, load_config
     from ..pipeline import scan_text
-    cfg: dict[str, Any] = {}
-    if isinstance(config, str):
-        import yaml
-        with open(config, encoding="utf-8-sig") as fh:
-            cfg = yaml.safe_load(fh) or {}
-    elif isinstance(config, dict):
-        cfg = config
+    cfg: dict[str, Any] = load_config(config) if config is not None else {}
     srv = server_settings(cfg)
     token = resolve_token(srv, auth_token)
     max_body = int(srv.get("max_body_bytes", max_body_bytes))
@@ -96,7 +90,10 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
                 state["guard"] = build_guard(cfg)
             return state["guard"]
 
-    BaseModel, Field = pydantic.BaseModel, pydantic.Field
+    Field = pydantic.Field
+
+    class BaseModel(pydantic.BaseModel):
+        model_config = pydantic.ConfigDict(extra="forbid")       # a typo such as "oder" must not change the decision
 
     class ScanIn(BaseModel):
         text: str | None = None

@@ -65,7 +65,8 @@ boundary_note: false                 # true appends a source-trust note to the q
 | `hf_classifier` | `model_id`, `option_labels`, `device`, `max_length`, `batch_size`, `subfolder` |
 | `callable` | `target: "package.module:name"` (a decide function, a model object, or a class / factory called with the remaining keys), `name` |
 
-`gate: false` disables the gate. With `selector: detector` the gate reuses a configured `ClaimDetector` scanner (or
+Unknown keys, at the top level and inside every section, are an error, and so are `block_scanners` names that are not
+among the configured scanners: a typo must not remove protection. `gate: false` disables the gate. With `selector: detector` the gate reuses a configured `ClaimDetector` scanner (or
 creates one, taking `threshold`, `device` and `onnx` from the gate section). `PromptInjection` and `ClaimDetector` take
 `onnx` as well. `audit` takes `path`, `include_text` and `max_bytes`; `server` takes `auth_token_env` and `max_body_bytes`.
 

@@ -54,6 +54,18 @@ def test_callable_target_resolves_from_working_directory(tmp_path, monkeypatch):
     assert g.decide("[USER PROMPT]\nhi", "q", ["a", "b"]).answer == "a"
 
 
+@pytest.mark.parametrize("cfg, msg", [
+    ({**CFG, "polcy": {"scanner_action": "block"}}, "unknown config key 'polcy' \\(did you mean 'policy'\\?\\)"),
+    ({"model": CFG["model"], "scaners": CFG["scanners"]}, "scaners"), ({**CFG, "guard": []}, "guard"),
+    ({**CFG, "server": {"port": 9000}}, "unknown server keys"), ({**CFG, "policy": {"block_scanners": ["VerdictToken"]}}, "block_scanners"),
+    ({**CFG, "scanners": [{"threshold": 0.5}]}, "needs a 'type'"), ({"model": "wolf_defender_jev"}, "'model' has the wrong type"),
+    ({"model": {"type": "wolf_defender_jevv"}}, "did you mean 'wolf_defender_jev'"), ({**CFG, "gate": {"windw": 3}}, "gate:"),
+    ({**CFG, "policy": {"unstable_actoin": "keep"}}, "policy:"), ({**CFG, "audit": {"pth": "x"}}, "audit:")])
+def test_typos_in_the_config_are_errors(cfg, msg):
+    with pytest.raises(ValueError, match=msg):                          # 0.1.2 ignored most of them silently
+        build_guard(cfg)
+
+
 def test_build_guard_errors():
     with pytest.raises(ValueError):
         build_guard({"model": {"type": "nope"}})

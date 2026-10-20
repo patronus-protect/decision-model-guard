@@ -43,6 +43,11 @@ class Policy:
         for k, allowed in checks.items():
             if getattr(self, k) not in allowed:
                 raise ValueError(f"{k} must be one of {allowed}")
+        if isinstance(self.block_scanners, str) or not all(isinstance(n, str) for n in self.block_scanners):
+            raise ValueError("block_scanners must be a list of scanner names")
+        fb = self.fallback_option
+        if fb is not None and (not isinstance(fb, int) or isinstance(fb, bool) or fb < 0):
+            raise ValueError("fallback_option must be an option index (0 or more)")
 
     @staticmethod
     def cautious_index(kind: Kind, probs: Sequence[float], risky: Sequence[int] | None, order: Sequence[int] | None,

@@ -156,7 +156,9 @@ def test_custom_guard_with_old_signature_still_works():
 
     DecisionGuard(refund_toy, guards=[Old(), New()]).decide(REFUND_CLEAN, "q", REFUND_OPTS, order=[0, 1, 2], fallback=1)
     assert New.seen == {"risky": None, "order": [0, 1, 2], "fallback": 1}
-    assert DecisionGuard(refund_toy).decide(REFUND_CLEAN, "q", REFUND_OPTS, kind="ordered").kind == Kind.ORDERED
+    assert DecisionGuard(refund_toy).decide(REFUND_CLEAN, "q", REFUND_OPTS, order=[0, 1, 2], kind="ordered").kind == Kind.ORDERED
+    with pytest.raises(ValueError, match="needs order"):              # 0.1.2 accepted it and ignored the gate result
+        DecisionGuard(refund_toy).decide(REFUND_CLEAN, "q", REFUND_OPTS, kind="ordered")
 
 
 # ----------------------------------------------------------------------------------------------- coverage edge cases

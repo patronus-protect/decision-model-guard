@@ -33,5 +33,7 @@ authentication is on, and `dmguard serve` warns when it listens on another host 
 is case-insensitive and a 401 carries `WWW-Authenticate: Bearer`. `/healthz`, `/readyz`, `/metrics` and the docs
 routes need no token.
 
-Invalid requests (fewer than two options, option index out of range) return 422. In Python:
+Invalid requests return 422: unknown fields (a misspelled `order` would otherwise change the decision rule), fewer than
+two options, duplicate options, option indices out of range, an `order` that does not list every option once, `risky`
+together with `order`. In Python:
 `decision_model_guard.server.create_app(guard=..., config=..., auth_token=...)` returns the FastAPI app for your own ASGI server.
