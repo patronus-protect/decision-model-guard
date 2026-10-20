@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 (2026-10-20)
+
+- Documentation and examples updated; the README installs from PyPI.
+
 ## 0.1.0 (2026-10-20)
 
 First release.

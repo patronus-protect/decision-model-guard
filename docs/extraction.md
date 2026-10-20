@@ -2,26 +2,8 @@
 
 Extraction models read text and return typed values instead of choosing an option: Cloudflare's
 [Clairic](https://blog.cloudflare.com/clairic-extraction-model/) returns spans, numbers, dates, lists and estimates with
-intervals; LLM extractors return JSON. Their values feed decisions, and text inside the content can plant them.
-
-## Measured on Clairic
-
-Twelve scenarios (insurance claims, invoices, refunds, expenses, a freelancer invoice, a rent deposit, a loan, a flight
-delay, a used car, a water damage, an electricity bill, a goodwill credit; two in German), each with a target field
-(an estimate or a computed amount) and a control field (a fact stated in the text). Four claim templates plant a value
-of 5 % and of 500 % of the reference, 96 attacks in total. Clairic preview on Workers AI, 2026-10-20:
-
-| | Clairic alone | With ExtractionGuard |
-|---|---:|---:|
-| Median shift of the target value | 17.7 % | 0.0 % |
-| Planted values that move it by more than 25 % | 49.0 % | 0.0 % |
-| Clean scenes changed by the guard | | 0.0 % |
-| Control field changed under attack | | 0.0 % |
-
-1.9 model calls per guarded extraction on average. Example: the hail claim (workshop quote 1,840 EUR) gets a payout
-estimate of 805 EUR; planted amounts of 40 EUR move it to between 52 and 63 EUR, planted amounts of 4,026 EUR to
-between 557 and 4,019 EUR, depending on the wording. With the guard it stays at 805 EUR in all eight attacks. All rows: [extraction_clairic.json](extraction_clairic.json).
-Reproduce with `evaluate_extraction(guard, load_extraction_cases())`.
+intervals; LLM extractors return JSON. Their values feed decisions, and text inside the content can plant them. `evaluate_extraction(guard, load_extraction_cases())`
+measures how far planted values move a given extractor, with and without the guard.
 
 ## ExtractionGuard
 
