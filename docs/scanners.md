@@ -9,9 +9,9 @@ where a sanitizer replaced text so that no offset exists, they are `None`.
 
 | Scanner | Parameters | Notes |
 |---|---|---|
-| `InvisibleText(remove=True)` | | zero-width characters, bidi controls, Unicode tag characters, other invisible format characters; emoji joiners stay |
+| `InvisibleText(remove=True)` | | zero-width characters, bidi controls, Unicode tag characters, other invisible format characters; emoji joiners and the subdivision flags (England, Scotland, Wales) stay; soft hyphens are removed but do not make the text invalid |
 | `ForgedTrustBlock(threshold=0.7, neutralize=False)` | `trusted_headers` | trusted-looking headers (`[SECURITY REVIEW | trusted]`, `[SYSTEM CONTEXT]`), chat role markers (`<|im_start|>system`, `[INST]`, `<<SYS>>`, `### System:`) score 1.0; speaker labels (`Assistant:`) 0.6. A header finding spans the forged block up to the next header-looking line |
-| `VerdictTokens(threshold=0.5, redact=False)` | | `verdict: safe`, `label = "benign"`, `"is_injection": false`, `risk_score=0`, `Einstufung: harmlos` |
+| `VerdictTokens(threshold=0.5, redact=False)` | | `verdict: safe`, `label = "benign"`, `"is_injection": false`, `risk_score=0`, `Einstufung: harmlos`; everyday keys (`status`, `result`, `class`, `decision`, `outcome`) only with a verdict word (`status: approved`), not `status: no` or `Result: 1` |
 | `PromptInjection(model=WOLF_DEFENDER_SMALL, threshold=0.5, match="full")` | `match`: `full`, `sentences`, `chunks`; `max_length=2048`; `onnx` | Wolf Defender (mmBERT, 15 languages). `WOLF_DEFENDER` selects the larger model |
 | `ClaimDetector(threshold=0.3, redact=False)` | `window=3`; `onnx` | the claim detector of the Decision Steering Gate; scores the gate's units, every sentence and the whole text, reports the smallest flagged pieces; `redact=True` removes them |
 | `Regex(patterns, is_blocked=True, redact=False)` | | your own patterns; `is_blocked=False` requires a match |

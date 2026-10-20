@@ -25,9 +25,15 @@ def _emoji_joiner(text: str, i: int) -> bool:
     return bool(prev and nxt) and unicodedata.category(prev) in ("So", "Mn", "Sk") and unicodedata.category(nxt) == "So"
 
 
+FLAGS = re.compile("\U0001F3F4(?:" + "|".join("".join(chr(0xE0000 + ord(c)) for c in t) for t in ("gbeng", "gbsct", "gbwls")) + ")\U000E007F")
+SOFT_HYPHEN = "\u00ad"
+
+
 def hidden_spans(text: str) -> list[tuple[int, int]]:
-    """Spans of the invisible characters InvisibleText reports."""
-    return [(i, i + 1) for i, ch in enumerate(text) if _hidden(ch) and not _emoji_joiner(text, i)]
+    """Spans of the invisible characters InvisibleText reports. The tag characters of the subdivision flag emoji
+    (England, Scotland, Wales) are part of a visible emoji and not reported."""
+    flags = {i for m in FLAGS.finditer(text) for i in range(m.start() + 1, m.end())}
+    return [(i, i + 1) for i, ch in enumerate(text) if _hidden(ch) and i not in flags and not _emoji_joiner(text, i)]
 
 
 def visible(text: str) -> str:
@@ -38,7 +44,9 @@ def visible(text: str) -> str:
 class InvisibleText:
     """Zero-width characters, bidirectional controls, Unicode tag characters and other invisible format characters.
 
-    They can hide instructions from human reviewers while the model still reads them. Sanitizing removes them."""
+    They can hide instructions from human reviewers while the model still reads them. Sanitizing removes them. Soft
+    hyphens (U+00AD, ordinary hyphenation) are removed too, so later scanners see the plain word, but on their own they
+    do not make the text invalid (score 0.3)."""
 
     name = "InvisibleText"
     RANGES = RANGES
@@ -50,8 +58,12 @@ class InvisibleText:
         spans = hidden_spans(text)
         if not spans:
             return ScanResult(self.name, text, True, 0.0)
-        findings = [Finding(self.name, 1.0, f"{len(spans)} invisible character(s)", spans[0][0], spans[-1][1])]
-        return ScanResult(self.name, replace_spans(text, spans) if self.remove else text, False, 1.0, findings)
+        strong = [x for x in spans if text[x[0]] != SOFT_HYPHEN]
+        score = 1.0 if strong else 0.3
+        shown = strong or spans
+        findings = [Finding(self.name, score, f"{len(shown)} invisible character(s)" if strong else f"{len(spans)} soft hyphen(s)",
+                            shown[0][0], shown[-1][1])]
+        return ScanResult(self.name, replace_spans(text, spans) if self.remove else text, not strong, score, findings)
 
 
 class ForgedTrustBlock:
@@ -99,12 +111,15 @@ class VerdictTokens:
     harmlos`. Content never decides its own label, so these are steering attempts or, at best, noise."""
 
     name = "VerdictTokens"
-    KEYS = (r"verdict|label|classification|class|decision|outcome|status|result|risk[ _-]?(?:score|level)|is[ _-]?(?:injection|malicious|safe|spam|phishing|attack)|"
-            r"safe[ _-]?to[ _-]?process|approved|approval|moderation|freigabe|einstufung|urteil|entscheidung|bewertung|ergebnis")
-    VALUES = (r"yes|no|true|false|benign|safe|clean|allow(?:ed)?|approve[d]?|ok|okay|pass(?:ed)?|low|none|0|1|harmless|legit(?:imate)?|verified|"
-              r"not[ _-]?(?:malicious|spam|phishing|an?[ _-]?attack|injection)|green|freigegeben|harmlos|genehmigt|sicher|unbedenklich|kein[ _-]?angriff")
-    PLAIN = re.compile(rf"\b(?:{KEYS})\b\s*[:=]\s*[\"'`]?(?:{VALUES})\b", re.I)
-    JSON = re.compile(rf"[\"'](?:{KEYS})[\"']\s*:\s*(?:true|false|[\"'](?:{VALUES})[\"']|0|1)", re.I)
+    KEYS = (r"verdict|label|classification|risk[ _-]?(?:score|level)|is[ _-]?(?:injection|malicious|safe|spam|phishing|attack)|"
+            r"safe[ _-]?to[ _-]?process|approved|approval|moderation|freigabe|einstufung|urteil")
+    # everyday keys ("Order status: no tracking yet", "Result: 1 item"): only a verdict word counts
+    GENERIC = r"class|decision|outcome|status|result|entscheidung|bewertung|ergebnis"
+    VERDICTS = (r"benign|safe|clean|allow(?:ed)?|approve[d]?|pass(?:ed)?|harmless|legit(?:imate)?|verified|"
+                r"not[ _-]?(?:malicious|spam|phishing|an?[ _-]?attack|injection)|green|freigegeben|harmlos|genehmigt|sicher|unbedenklich|kein[ _-]?angriff")
+    VALUES = rf"yes|no|true|false|ok|okay|low|none|0|1|{VERDICTS}"
+    PLAIN = re.compile(rf"\b(?:{KEYS})\b\s*[:=]\s*[\"'`]?(?:{VALUES})\b|\b(?:{GENERIC})\b\s*[:=]\s*[\"'`]?(?:{VERDICTS})\b", re.I)
+    JSON = re.compile(rf"[\"'](?:{KEYS})[\"']\s*:\s*(?:true|false|[\"'](?:{VALUES})[\"']|0|1)|[\"'](?:{GENERIC})[\"']\s*:\s*[\"'](?:{VERDICTS})[\"']", re.I)
 
     def __init__(self, threshold: float = 0.5, redact: bool = False):
         self.threshold, self.redact = threshold, redact
