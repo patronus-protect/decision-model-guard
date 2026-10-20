@@ -156,7 +156,7 @@ class DecisionGuard:
         calls = outcome.calls
         for g in self.guards:
             r = _check(g, self.model, model_scene, q, options, outcome.probs if outcome.flagged else outcome.raw, k,
-                       risky=risky, order=order, fallback=fallback)
+                       risky=risky, order=order, fallback=fallback, raw_probs=list(outcome.raw))
             reports.append(r)
             calls += r.calls
         index, probs, action, reasons = self.policy.apply(k, outcome, scans, reports[1:] if self.gate is not None else reports,
@@ -190,14 +190,16 @@ class DecisionGuard:
 
 
 def _check(guard, *args, **ctx) -> GuardReport:
-    """Call a guard; the decision context (risky, order, fallback) goes only to guards whose check() accepts it."""
+    """Call a guard with the decision context (risky, order, fallback, raw_probs): all of it for guards that take
+    **kwargs, the keywords they name otherwise, nothing for guards with the six positional parameters only."""
     try:
-        params = inspect.signature(guard.check).parameters.values()
+        params = list(inspect.signature(guard.check).parameters.values())
     except (TypeError, ValueError):
-        params = ()
-    if any(p.kind == p.VAR_KEYWORD for p in params) or {p.name for p in params} >= set(ctx):
+        params = []
+    if any(p.kind == p.VAR_KEYWORD for p in params):
         return guard.check(*args, **ctx)
-    return guard.check(*args)
+    names = {p.name for p in params}
+    return guard.check(*args, **{k: v for k, v in ctx.items() if k in names})
 
 
 def guard_decision(model: DecisionModel | DecideBatch, scene: str | Scene, question: str, options: Sequence[str], **kw) -> GuardedDecision:

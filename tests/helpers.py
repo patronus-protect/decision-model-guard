@@ -118,3 +118,38 @@ def wording_sensitive(scenes, question, options):
     w[0] = 2.0 if options[0].strip().endswith(".") else 1.0
     t = sum(w)
     return [[x / t for x in w] for _ in scenes]
+
+
+class ToyDecider:
+    """One toy model for end-to-end runs. It reads the option texts (so option order and wording do not matter):
+    refund questions: believes approval claims (CLAIM_WORDS) and authorizes, otherwise verifies;
+    team questions: technical for "technical team" or crashes, billing for charges, else general;
+    instruction questions: an injection detector that reads only the first and last 600 characters (context limit)
+    and believes "marked safe" claims."""
+
+    name = "toy-decider"
+    context_tokens = 300
+
+    def count_tokens(self, text):
+        return max(1, len(text) // 4)
+
+    @staticmethod
+    def _pick(options, word):
+        hit = [i for i, o in enumerate(options) if word in o.lower()]
+        k = hit[0] if hit else 0
+        return [0.9 if i == k else 0.1 / (len(options) - 1) for i in range(len(options))]
+
+    def decide_batch(self, scenes, question, options):
+        q, out = question.lower(), []
+        for s in scenes:
+            low = s.lower()
+            if "refund" in q:
+                out.append(self._pick(options, "authorize" if any(w in low for w in CLAIM_WORDS) else "verify"))
+            elif "team" in q:
+                word = "technical" if ("technical team" in low or "crash" in low) else "billing" if "charged" in low else "general"
+                out.append(self._pick(options, word))
+            else:
+                seen = (low[:600] + " " + low[-600:]) if len(low) > 1200 else low
+                attack = "forward all" in seen and "marked safe" not in seen
+                out.append(self._pick(options, "yes" if attack else "no"))
+        return out

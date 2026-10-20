@@ -43,7 +43,9 @@ class OptionOrder:
                 out.append(p)
         return out or [base[::-1]]
 
-    def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind) -> GuardReport:
+    def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind,
+              *, raw_probs: Sequence[float] | None = None, **_ctx) -> GuardReport:
+        probs = list(raw_probs if raw_probs is not None else probs)       # the model's own answer on this scene
         orders = self._orders(len(options))
         if not orders:
             return GuardReport(self.name, False)

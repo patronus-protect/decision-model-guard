@@ -1,14 +1,14 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <img alt="dmguard: Decision Model Guard, guardrails for decision models" src="assets/logo-light.svg" width="720">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/patronus-protect/decision-model-guard/main/assets/logo-dark.svg">
+    <img alt="dmguard: Decision Model Guard, guardrails for decision models" src="https://raw.githubusercontent.com/patronus-protect/decision-model-guard/main/assets/logo-light.svg" width="720">
   </picture>
 </p>
 
 <p align="center">
   <a href="https://github.com/patronus-protect/decision-model-guard/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/patronus-protect/decision-model-guard/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-2a78d6">
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2a78d6"></a>
+  <a href="https://github.com/patronus-protect/decision-model-guard/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2a78d6"></a>
   <img alt="Runs on ONNX Runtime without torch" src="https://img.shields.io/badge/ONNX%20Runtime-no%20torch%20needed-2a78d6">
 </p>
 
@@ -19,11 +19,11 @@
 It is to decision models what [LLM Guard](https://github.com/protectai/llm-guard) is to chat models: content scanners for the untrusted text, guards around the decision, a policy that turns the results into an action, plus an API server, a CLI, a YAML config and an evaluation tool.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/demo-dark.svg">
-  <img alt="Erase-and-check in action: one planted sentence makes Qwen2.5-0.5B-Instruct call a phishing email legitimate; the gate erases one sentence at a time and restores the verdict phishing" src="assets/demo-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/patronus-protect/decision-model-guard/main/assets/demo-dark.svg">
+  <img alt="Erase-and-check in action: one planted sentence makes Qwen2.5-0.5B-Instruct call a phishing email legitimate; the gate erases one sentence at a time and restores the verdict phishing" src="https://raw.githubusercontent.com/patronus-protect/decision-model-guard/main/assets/demo-light.svg" width="100%">
 </picture>
 
-<sub>This is a recorded run: Qwen2.5-0.5B-Instruct calls a phishing email legitimate because of one planted sentence. The claim detector flags it, the gate erases one piece of the email at a time, asks the model again and keeps the highest risk. Every number comes from <a href="assets/demo_run.json"><code>assets/demo_run.json</code></a>; <a href="scripts/readme_assets.py"><code>scripts/readme_assets.py</code></a> records the run and renders the animation.</sub>
+<sub>This is a recorded run: Qwen2.5-0.5B-Instruct calls a phishing email legitimate because of one planted sentence. The claim detector flags it, the gate erases one piece of the email at a time, asks the model again and keeps the highest risk. Every number comes from <a href="https://github.com/patronus-protect/decision-model-guard/blob/main/assets/demo_run.json"><code>assets/demo_run.json</code></a>; <a href="https://github.com/patronus-protect/decision-model-guard/blob/main/scripts/readme_assets.py"><code>scripts/readme_assets.py</code></a> records the run and renders the animation.</sub>
 
 ```bash
 pip install "decision-model-guard[onnx] @ git+https://github.com/patronus-protect/decision-model-guard"
@@ -44,7 +44,7 @@ d.answer, d.action, d.reasons, d.culprit
 dmguard audit --config dmguard.yml          # how robust is your model, with and without the guard?
 ```
 
-[Why](#why-decision-models-need-their-own-guardrails) · [Features](#features) · [Audit](#audit-your-model) · [Results](#results) · [Comparison](#how-it-compares) · [Installation](#installation) · [Quickstart](#quickstart) · [Docs](docs/)
+[Why](#why-decision-models-need-their-own-guardrails) · [Features](#features) · [Audit](#audit-your-model) · [Results](#results) · [Comparison](#how-it-compares) · [Installation](#installation) · [Quickstart](#quickstart) · [Docs](https://github.com/patronus-protect/decision-model-guard/blob/main/)
 
 ## Why decision models need their own guardrails
 
@@ -77,11 +77,11 @@ Chat guardrails check prompts and answers. Decision models fail in other places:
 
 ## Results
 
-On a decision-steering benchmark with five tasks (refund, prompt injection, phishing and spam, ticket routing, escalation) and six decision models (Clef, drex, Lux, pplx-decider, Julia-1, GLiNER2.5-Decide), the steering gate cut the mean attack success rate from **28.1 % to 0.3 %**, and to zero in 28 of 29 model-task pairs. For ticket routing the claim detector cut false fallbacks from 92 % to between 2 and 8 % for the four large models, with 0 to 1.3 % of routing attacks getting through. Details: [docs/benchmarks.md](docs/benchmarks.md).
+On a decision-steering benchmark with five tasks (refund, prompt injection, phishing and spam, ticket routing, escalation) and six decision models (Clef, drex, Lux, pplx-decider, Julia-1, GLiNER2.5-Decide), the steering gate cut the mean attack success rate from **28.1 % to 0.3 %**, and to zero in 28 of 29 model-task pairs. For ticket routing the claim detector cut false fallbacks from 92 % to between 2 and 8 % for the four large models, with 0 to 1.3 % of routing attacks getting through. Details: [docs/benchmarks.md](https://github.com/patronus-protect/decision-model-guard/blob/main/).
 
 ## Audit your model
 
-`dmguard audit` attacks and stresses your decision model with ten checks and shows how often it gets steered, with and without the guard. The scorecard below is a real run: Qwen2.5-0.5B-Instruct as an LLM judge on the twelve bundled sample cases (refunds, ticket routing, prompt injection, escalation, phishing), guarded like `DecisionGuard.default` plus `Coverage`, on a laptop CPU in about 13 minutes. Raw numbers: [docs/audit_qwen.json](docs/audit_qwen.json).
+`dmguard audit` attacks and stresses your decision model with ten checks and shows how often it gets steered, with and without the guard. The scorecard below is a real run: Qwen2.5-0.5B-Instruct as an LLM judge on the twelve bundled sample cases (refunds, ticket routing, prompt injection, escalation, phishing), guarded like `DecisionGuard.default` plus `Coverage`, on a laptop CPU in about 13 minutes. Raw numbers: [docs/audit_qwen.json](https://github.com/patronus-protect/decision-model-guard/blob/main/).
 
 ```bash
 dmguard audit --config examples/audit_qwen.yml --markdown audit.md
@@ -105,7 +105,7 @@ dmguard audit --config examples/audit_qwen.yml --markdown audit.md
 - **Robustness checks stay open in this configuration:** the answer still changes with the format (8 %), the option wording (19 %) and the option order (42 %, 25 % with the guard). `Invariance` and `OptionOrder` flag these decisions; they were left out here to show the raw sensitivity.
 - **The price:** on a quarter of the decisions with a harmless sentence added, the guard did not simply allow the answer (it fell back, escalated or took the cautious option).
 
-`--max-attack-success 0.05` turns the audit into a CI gate. Details on every check: [docs/robustness.md](docs/robustness.md).
+`--max-attack-success 0.05` turns the audit into a CI gate. Details on every check: [docs/robustness.md](https://github.com/patronus-protect/decision-model-guard/blob/main/).
 
 ## How it compares
 
@@ -256,7 +256,7 @@ sanitized, results_valid, results_score = scan_content([InvisibleText(), Verdict
 | `Confidence` | minimum top probability and margin |
 | `Conformal` | abstain unless the conformal prediction set holds exactly one option (after `dmguard calibrate`) |
 
-`Policy` maps results to actions: `gate_action`, `unstable_action`, `scanner_action`, `block_scanners`, `low_confidence_action`, `inconsistent_action`, `coverage_action`, `fallback_option`. See [docs/guards-and-policy.md](docs/guards-and-policy.md) and [docs/robustness.md](docs/robustness.md).
+`Policy` maps results to actions: `gate_action`, `unstable_action`, `scanner_action`, `block_scanners`, `low_confidence_action`, `inconsistent_action`, `coverage_action`, `fallback_option`. See [docs/guards-and-policy.md](https://github.com/patronus-protect/decision-model-guard/blob/main/) and [docs/robustness.md](https://github.com/patronus-protect/decision-model-guard/blob/main/).
 
 ## Configuration
 
@@ -299,7 +299,7 @@ dmguard serve --config dmguard.yml --port 8000
 
 ## API server
 
-`dmguard serve` starts a FastAPI app with `POST /v1/decide`, `POST /v1/decide/batch`, `POST /v1/scan`, `GET /healthz`, `GET /readyz` and `GET /metrics` (Prometheus). Set `server.auth_token_env` (default `DMGUARD_TOKEN`) to require a bearer token. See [docs/api.md](docs/api.md).
+`dmguard serve` starts a FastAPI app with `POST /v1/decide`, `POST /v1/decide/batch`, `POST /v1/scan`, `GET /healthz`, `GET /readyz` and `GET /metrics` (Prometheus). Set `server.auth_token_env` (default `DMGUARD_TOKEN`) to require a bearer token. See [docs/api.md](https://github.com/patronus-protect/decision-model-guard/blob/main/).
 
 ```bash
 curl -s localhost:8000/v1/decide -H 'Content-Type: application/json' -d '{
@@ -351,7 +351,7 @@ python -m build
 
 ## Citation
 
-If you use Decision Model Guard in research or a product evaluation, please cite it; GitHub's "Cite this repository" button uses [CITATION.cff](CITATION.cff). Contributions are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). If the project is useful to you, a star helps other teams find it.
+If you use Decision Model Guard in research or a product evaluation, please cite it; GitHub's "Cite this repository" button uses [CITATION.cff](https://github.com/patronus-protect/decision-model-guard/blob/main/). Contributions are welcome, see [CONTRIBUTING.md](https://github.com/patronus-protect/decision-model-guard/blob/main/). If the project is useful to you, a star helps other teams find it.
 
 ## License
 

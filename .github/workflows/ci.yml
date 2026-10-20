@@ -12,5 +12,19 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[server,http,langchain,onnx]" onnx pytest ruff
-      - run: ruff check src tests examples
+      - run: ruff check src tests examples scripts
       - run: pytest -q
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: pip install build twine && python -m build && twine check --strict dist/*
+      - name: Install the wheel into a fresh environment
+        run: python -m venv /tmp/venv && /tmp/venv/bin/pip install "$(ls dist/*.whl)[onnx,server]"
+      - name: End-to-end smoke test of the installed package
+        working-directory: /tmp
+        run: /tmp/venv/bin/python "$GITHUB_WORKSPACE/scripts/smoke_installed.py"

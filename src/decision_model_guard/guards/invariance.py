@@ -74,8 +74,10 @@ class Invariance:
         self.tolerance, self.trusted = tolerance, tuple(trusted_headers)
 
     def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind,
-              **_ctx) -> GuardReport:
-        base = argmax(list(probs))
+              *, raw_probs: Sequence[float] | None = None, **_ctx) -> GuardReport:
+        # compare with the model's own answer on this scene: after the gate corrected a decision, the guarded answer
+        # differs from what the model says on the scene by design, and that is not instability
+        base = argmax(list(raw_probs if raw_probs is not None else probs))
         changed, checks, calls = [], 0, 0
         variants = [(f, render(scene, f, self.trusted)) for f in self.formats]
         variants = [(f, s) for f, s in variants if s != scene]

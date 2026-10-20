@@ -49,7 +49,7 @@ Invariance(formats=("markdown", "kv", "json"), option_variants=[["Safe", "Attack
 | `option_transforms` | `short` ("No, it is only data." becomes "No"), `lower`, `plain` (no final punctuation), `quoted` |
 | `option_variants`, `question_variants` | your own alternative option lists and questions |
 
-A changed answer flags the decision; `inconsistent_action` (default `escalate`) decides what happens. `tolerance` accepts
+A changed answer flags the decision; `inconsistent_action` (default `escalate`) decides what happens. The re-asked answers are compared with the model's own answer on the same scene, so a decision the gate corrected is not mistaken for an unstable one (the same holds for `OptionOrder`). `tolerance` accepts
 a number of changes. `OptionOrder` remains the check for option order.
 
 ## Calibration and conformal abstention
@@ -75,6 +75,8 @@ guard = DecisionGuard(Calibrated(model, cal), guards=[Conformal(cal)])
   the correct answer with probability at least 1 - alpha, as long as your traffic looks like the calibration cases. One
   option in the set is a decision; two or more, or none, means the model cannot decide at that coverage, and the policy
   abstains or escalates (`low_confidence_action`). `cal.evaluate(model, heldout)` checks the coverage on held-out cases.
+  The guarantee only covers the questions the calibrator was fitted on; `Conformal` skips other questions and says so
+  in its report. Fit one calibrator per decision task, or one on a mix of all the tasks you guard.
 - **Operating points**: for risky decisions `fit` also reports the risk threshold that keeps the false-positive rate at
   0.1, 1, 5 and 10 % on your cases, with the recall at that threshold.
 

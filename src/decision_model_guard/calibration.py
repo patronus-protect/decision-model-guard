@@ -209,7 +209,10 @@ class Calibrated:
 
 
 class Conformal:
-    """Abstain unless the conformal prediction set holds exactly one option (coverage 1 - alpha of the calibrator)."""
+    """Abstain unless the conformal prediction set holds exactly one option (coverage 1 - alpha of the calibrator).
+
+    The guarantee holds only for the decisions the calibrator was fitted on: questions it has not seen are skipped and
+    reported as such (fit one calibrator per decision task, or fit on a mix of all tasks you guard)."""
 
     name = "Conformal"
 
@@ -220,6 +223,9 @@ class Conformal:
 
     def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind,
               **_ctx) -> GuardReport:
+        tasks = self.calibrator.tasks
+        if tasks and not any(question.startswith(t) for t in tasks):   # startswith: a boundary note may follow the question
+            return GuardReport(self.name, False, 0.0, 0, {"skipped": "not calibrated for this question"})
         already = isinstance(model, Calibrated) and model.calibrator is self.calibrator
         s = self.calibrator.prediction_set(probs, calibrated=already)
         return GuardReport(self.name, len(s) != 1, float(len(s) != 1), 0,
