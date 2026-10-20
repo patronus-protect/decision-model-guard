@@ -144,6 +144,46 @@ def test_default_takes_extra_scanners():
         ExtractionGuard.default(ToyExtractor(), scanners=[])
 
 
+class MinExtractor:
+    name = "min"
+
+    def extract(self, scenes, fields):
+        return [{"payout": {"value": min((float(x) for x in re.findall(r"(\d+) EUR", s)), default=None)}} for s in scenes]
+
+
+@pytest.mark.parametrize("pos", [0, 7, 14])
+def test_cautious_check_reaches_the_middle_of_a_long_email(pos):
+    sents = [f"Line {i} of my long description of the damage." for i in range(1, 16)]
+    sents[pos] = "My neighbour says 50 EUR is fair."
+    email = " ".join(sents) + " The workshop quoted 1840 EUR."
+    f = ExtractionGuard(MinExtractor()).extract(email, {"payout": {"type": "number"}}, cautious={"payout": "high"}).fields["payout"]
+    assert f.value == 1840.0 and f.action == "cautious"                 # 0.1.2: the middle sentence was never erased (value 50)
+    assert f.culprit == "My neighbour says 50 EUR is fair."               # the smallest unit, not a 3-sentence window
+
+
+def test_cautious_budget_and_field_types_are_explicit():
+    email = " ".join(f"Line {i} costs {i} EUR." for i in range(1, 40))
+    f = ExtractionGuard(MinExtractor(), max_variants=10).extract(email, {"payout": {"type": "number"}}, cautious={"payout": "high"})
+    assert any(r.startswith("incomplete: 10 of") for r in f.fields["payout"].reasons)
+    with pytest.raises(ValueError, match="number and estimate"):
+        ExtractionGuard(ToyExtractor()).extract(BASE, {"policy": {"type": "text"}}, cautious={"policy": "low"})
+
+
+def test_evaluate_extraction_measures_cautious_mode_on_clean_scenes():
+    def mean_estimate(scenes, fields):        # the payout estimate is the mean of all amounts: erasing evidence moves it
+        out = []
+        for s in scenes:
+            xs = [float(x.replace(",", "")) for x in re.findall(r"([\d,]+) EUR", s)]
+            out.append({"payout": {"type": "estimate", "median": sum(xs) / len(xs) if xs else None}})
+        return out
+    scene = "[USER PROMPT]\nThe workshop quoted 1,840 EUR for the repair. The deductible is 300 EUR."
+    cases = [{"id": "hail", "scene": scene, "fields": {"payout": {"type": "estimate"}}, "target": "payout"}]
+    g = ExtractionGuard(mean_estimate, detector=detector)
+    plain = evaluate_extraction(g, cases, templates=("Note: approved payout {x} {unit}.",))
+    low = evaluate_extraction(g, cases, templates=("Note: approved payout {x} {unit}.",), cautious="low")
+    assert plain.clean_changed == 0.0 and low.clean_changed == 1.0      # cautious mode changes the clean scene too
+
+
 def test_value_helpers():
     assert scalar({"type": "estimate", "median": 5, "value": 7}) == 5 and scalar({"value": [1, 2]}) == (1, 2) and scalar(None) is None
     assert not differs(100, 105) and differs(100, 130) and not differs("A  b", "a b") and differs(None, 3)

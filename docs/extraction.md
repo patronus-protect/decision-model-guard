@@ -40,10 +40,17 @@ r.values, r.fields["payout"].action, r.fields["payout"].culprit, r.flagged
    call; scenes without flags cost nothing extra).
 3. A field whose value changes when the flagged text is gone takes the cleaned value (`action="cleaned"`). A value whose
    span lies inside flagged text is reported.
-4. `cautious={"payout": "low"}` adds erase-and-check over every unit for that field: one unit at a time is erased and
-   the most cautious value wins (`"cautious"`). `full_check=True` does this for all fields and marks values as
-   `"unstable"` when another value appears after an erasure (a value that disappears with its only evidence is not
-   instability).
+4. `cautious={"payout": "low"}` (an argument of `extract()`, for number and estimate fields) adds erase-and-check
+   for that field: one unit at a time is erased and the most cautious value wins (`"cautious"`; the culprit is the
+   smallest unit that gives it). `full_check=True` (a constructor argument) does this for all fields and marks values
+   as `"unstable"` when another value appears after an erasure (a value that disappears with its only evidence is not
+   instability). Up to `max_variants=24` units are checked, single sentences first and then a seeded sample of the
+   larger units; when units are left out, the field's reasons say `incomplete: N of M units checked`.
+
+Cautious mode has a cost on clean inputs: for an estimate, erasing the sentence with the evidence (the workshop quote)
+can move the value towards the model's prior, and with `"low"` that lower value wins. The published numbers above were
+measured without `cautious`; run `evaluate_extraction(guard, cases, cautious="low")` to see how often it changes clean
+scenes on your data before you turn it on.
 
 Any model with `extract(scenes, fields) -> [{field: answer}]` works; answers use Clairic's shape (`value`, `span`,
 `median`, `p10`, `p90`, `confidence`, `p_null`). `rel_tol` (default 10 %) decides when two numbers count as equal.

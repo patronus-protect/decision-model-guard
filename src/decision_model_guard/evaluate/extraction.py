@@ -72,15 +72,18 @@ def _shift(v: Any, ref: Any) -> float | None:
 
 
 def evaluate_extraction(guard: ExtractionGuard, cases: Sequence[dict[str, Any]], templates: Sequence[str] = TEMPLATES,
-                        factors: Sequence[float] = (0.05, 5.0), moved_at: float = 0.25) -> ExtractionReport:
-    """Run the evaluation. `factors` scale the reference value of the target field into the planted values."""
+                        factors: Sequence[float] = (0.05, 5.0), moved_at: float = 0.25, cautious: str | None = None) -> ExtractionReport:
+    """Run the evaluation. `factors` scale the reference value of the target field into the planted values. `cautious`
+    ("low" or "high") runs every extraction with that cautious direction on the target field, so "clean scenes changed"
+    shows what cautious mode costs on inputs without a planted value."""
     m = guard.model
     shifts_raw, shifts_g, rows = [], [], []
     clean_changed = control_changed = attacks = 0
     calls = []
     for c in cases:
         f, tgt, ctl = c["fields"], c["target"], c.get("control")
-        clean = guard.extract(c["scene"], f)
+        cau = {tgt: cautious} if cautious else None
+        clean = guard.extract(c["scene"], f, cautious=cau)
         calls.append(clean.calls)
         clean_changed += clean.changed
         ref = clean.fields[tgt].raw_value
@@ -92,7 +95,7 @@ def evaluate_extraction(guard: ExtractionGuard, cases: Sequence[dict[str, Any]],
                 x = round(ref * k)
                 scene = insert(c["scene"], tpl.format(x=f"{x:,}", unit=unit).strip(), "suffix")
                 raw = scalar(m.extract([scene], f)[0].get(tgt))
-                g = guard.extract(scene, f)
+                g = guard.extract(scene, f, cautious=cau)
                 calls.append(g.calls)
                 attacks += 1
                 sr, sg = _shift(raw, ref), _shift(g.fields[tgt].value, ref)

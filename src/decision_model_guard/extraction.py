@@ -13,12 +13,16 @@ ExtractionGuard wraps any model with `extract(scenes, fields) -> [{field: answer
 3. Per field: when erasing the flagged text changes the value, the cleaned value wins (action "cleaned") and the
    flagged text is reported. A value whose span lies inside flagged text is reported too. When a scanner flagged text
    that no unit contains, so it could not be erased, the field is marked "unverified".
-4. Fields with a cautious direction (`cautious={"payout": "low"}`) also get erase-and-check over every unit: one unit at
-   a time is erased and the most cautious value wins (action "cautious"). `full_check=True` runs it for all fields and
-   flags values that change ("unstable").
+4. Number and estimate fields with a cautious direction (`cautious={"payout": "low"}`) also get erase-and-check over
+   the units: one unit at a time is erased and the most cautious value wins (action "cautious"; the culprit is the
+   smallest unit that gives it). `full_check=True` runs it for all fields and flags values that change ("unstable").
+   Up to `max_variants` units are checked: single sentences first, then a seeded sample of the larger units; when units
+   are left out, the field says so in its reasons. Erasing the evidence itself can lower an estimate towards the
+   model's prior, so cautious mode also changes clean inputs: measure it on your traffic.
 """
 from __future__ import annotations
 
+import random
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
@@ -160,6 +164,14 @@ class ExtractionGuard:
         return cls(model, detector=ClaimDetector(onnx=onnx), scanners=[InvisibleText(), ForgedTrustBlock(), VerdictTokens(), *extra_scanners],
                    **kw)
 
+    def _budget(self, all_units: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """Up to max_variants units for the erase-and-check: units that contain no other unit (single sentences) first,
+        then a seeded sample of the rest, like the gate."""
+        inner = [u for u in all_units if not any(v != u and u[0] <= v[0] and v[1] <= u[1] for v in all_units)]
+        rest = [u for u in all_units if u not in inner]
+        random.Random(0).shuffle(rest)
+        return (inner + rest)[: self.max_variants]
+
     def extract(self, scene: str | Scene, fields: dict[str, dict[str, Any]], cautious: dict[str, str] | None = None) -> GuardedExtraction:
         """Extract `fields` from the scene with flagged claims erased first (see the module docstring)."""
         t0 = time.perf_counter()
@@ -167,6 +179,9 @@ class ExtractionGuard:
         bad = {k: v for k, v in cautious.items() if v not in ("low", "high") or k not in fields}
         if bad:
             raise ValueError(f"cautious must map field names to 'low' or 'high': {bad}")
+        other = {k: fields[k].get("type") for k in cautious if fields[k].get("type") not in (None, "number", "estimate")}
+        if other:
+            raise ValueError(f"cautious applies to number and estimate fields only: {other}")
         text, blocks = scene_blocks(scene, self.trusted, allow_action=False)
         sanitized, sblocks, scans = _scan(text, blocks, self.scanners)
         sc, bl = (sanitized, sblocks) if self.use_sanitized else (text, blocks)
@@ -194,7 +209,8 @@ class ExtractionGuard:
         for a, b in sorted(merged, reverse=True):
             cleaned = erase(cleaned, a, b)
         need_variants = self.full_check or bool(cautious)
-        singles = all_units[: self.max_variants] if need_variants else []
+        singles = self._budget(all_units) if need_variants else []
+        left_out = len(all_units) - len(singles) if need_variants else 0
         scenes = [sc] + ([cleaned] if merged else []) + [erase(sc, a, b) for a, b in singles]
         outs = check_extractions(self.model.extract(scenes, fields), len(scenes), fields, getattr(self.model, "name", type(self.model).__name__))
         raw, clean = outs[0], (outs[1] if merged else None)
@@ -221,7 +237,8 @@ class ExtractionGuard:
                 nums = [(x, ans, t) for x, ans, t in vals if isinstance(x, (int, float)) and not isinstance(x, bool)]
                 if name in cautious and nums and isinstance(fr.value, (int, float)):
                     pick = min if cautious[name] == "low" else max
-                    best = pick(nums, key=lambda z: z[0])
+                    top = pick(z[0] for z in nums)
+                    best = min((z for z in nums if not differs(z[0], top, self.rel_tol)), key=lambda z: len(z[2]))   # smallest unit
                     if pick(best[0], fr.value) == best[0] and differs(best[0], fr.value, self.rel_tol):
                         fr.reasons.append(f"erasing {best[2]!r} gives the more cautious value {best[0]!r}")
                         fr.value, fr.answer, fr.action, fr.culprit = best[0], best[1], "cautious", best[2]
@@ -231,6 +248,8 @@ class ExtractionGuard:
                     fr.reasons.append(f"erasing {who!r} changes the value")
                     if fr.action == "allow":
                         fr.action, fr.culprit = "unstable", who
+            if left_out and (name in cautious or self.full_check):
+                fr.reasons.append(f"incomplete: {len(singles)} of {len(all_units)} units checked (max_variants)")
             if unerased:
                 fr.reasons.append(f"content scanners: {unerased} flagged piece(s) could not be erased")
                 if fr.action == "allow":
