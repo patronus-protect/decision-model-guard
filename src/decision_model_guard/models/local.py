@@ -68,10 +68,14 @@ class HFClassifier:
         return len(self.tok.encode(text, add_special_tokens=False))
 
     def decide_batch(self, scenes: Sequence[str], question: str, options: Sequence[str]) -> list[list[float]]:
-        import torch
         labels = self.option_labels or list(range(len(options)))
         if len(labels) != len(options):
             raise ValueError("option_labels must name one classifier label per option")
+        n = int(self.model.config.num_labels)
+        if any(not 0 <= j < n for j in labels):
+            names = ", ".join(str(v) for _, v in sorted((self.model.config.id2label or {}).items())) or f"{n} labels"
+            raise ValueError(f"this classifier has {n} labels ({names}); pass {n} options or option_labels")
+        import torch
         out = []
         with torch.no_grad():
             for i in range(0, len(scenes), self.batch_size):

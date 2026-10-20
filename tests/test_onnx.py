@@ -195,3 +195,27 @@ def test_default_loads_the_detector_at_construction(monkeypatch):
     monkeypatch.setattr(ClaimDetector, "_load", lambda self: loaded.append(self) or (None, 1))
     g = DecisionGuard.default(refund_toy)                               # 0.1.2 failed or downloaded only at the first decision
     assert loaded == [g.scanners[-1]]
+
+
+def test_relative_onnx_path_is_a_local_file(detector_repo, monkeypatch, tmp_path):
+    import huggingface_hub
+
+    from decision_model_guard._onnx import resolve
+    monkeypatch.chdir(detector_repo)
+    asked = []
+    def fake(repo, filename, revision=None):
+        asked.append(filename)
+        return str(detector_repo / filename)
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", fake)
+    folder, graph = resolve("some-org/detector", "onnx/onnx_fp32/model.onnx")   # 0.1.2 looked this path up on the hub (404)
+    assert graph == (detector_repo / "onnx/onnx_fp32/model.onnx").resolve() and asked == ["config.json", "tokenizer.json"]
+
+
+def test_hf_classifier_checks_the_number_of_labels():
+    from types import SimpleNamespace
+
+    from decision_model_guard.models import HFClassifier
+    m = HFClassifier.__new__(HFClassifier)
+    m.option_labels, m.model = None, SimpleNamespace(config=SimpleNamespace(num_labels=2, id2label={0: "benign", 1: "injection"}))
+    with pytest.raises(ValueError, match=r"2 labels \(benign, injection\)"):       # 0.1.2: a raw torch IndexError
+        m.decide_batch(["x"], "q", ["a", "b", "c"])

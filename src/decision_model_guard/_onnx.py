@@ -29,18 +29,20 @@ _LOCK = threading.Lock()
 
 def resolve(repo_or_path: str, variant: str, files: Sequence[str] = ("config.json", "tokenizer.json"),
             revision: str | None = None) -> tuple[Path, Path]:
-    """(folder with config and tokenizer, graph path). From the hub only the listed files and the chosen graph are fetched."""
+    """(folder with config and tokenizer, graph path). From the hub only the listed files and the chosen graph are fetched.
+    A variant that names an existing local file (absolute or relative to the working directory) is used as it is."""
     rel = VARIANTS.get(variant, variant)
     if not rel.endswith(".onnx"):
         raise ValueError(f"onnx must be one of {sorted(VARIANTS)} or a path to an .onnx file, got {variant!r}")
+    local = Path(os.path.expanduser(rel)).resolve() if variant not in VARIANTS and os.path.isfile(os.path.expanduser(rel)) else None
     if os.path.isdir(repo_or_path):
         folder = Path(repo_or_path)
-        graph = Path(rel) if os.path.isabs(rel) else folder / rel
+        graph = local or (Path(rel) if os.path.isabs(rel) else folder / rel)
     else:
         hub = require("huggingface_hub", "onnx")
         paths = [Path(hub.hf_hub_download(repo_or_path, f, revision=revision)) for f in files]
         folder = paths[0].parent
-        graph = Path(rel) if os.path.isabs(rel) else Path(hub.hf_hub_download(repo_or_path, rel, revision=revision))
+        graph = local or (Path(rel) if os.path.isabs(rel) else Path(hub.hf_hub_download(repo_or_path, rel, revision=revision)))
     if not graph.is_file():
         raise FileNotFoundError(f"ONNX graph not found: {graph}")
     return folder, graph
