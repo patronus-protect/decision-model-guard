@@ -226,7 +226,8 @@ class Conformal:
         tasks = self.calibrator.tasks
         if tasks and not any(question.startswith(t) for t in tasks):   # startswith: a boundary note may follow the question
             return GuardReport(self.name, False, 0.0, 0, {"skipped": "not calibrated for this question"})
-        already = isinstance(model, Calibrated) and model.calibrator is self.calibrator
+        already = isinstance(model, Calibrated) and (model.calibrator is self.calibrator
+                                                      or model.calibrator.to_dict() == self.calibrator.to_dict())
         s = self.calibrator.prediction_set(probs, calibrated=already)
         return GuardReport(self.name, len(s) != 1, float(len(s) != 1), 0,
                            {"set": [options[i] for i in s], "coverage": round(1 - (self.calibrator.alpha or 0), 4)})

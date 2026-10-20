@@ -278,3 +278,18 @@ def test_cli_audit_gate_fails_when_nothing_was_measured(tmp_path, capsys):
         main(["audit", "--config", str(cfg), "--per-case", "0"])
     with pytest.raises(ValueError, match="per_case"):
         audit(gullible, REFUND_CASES, per_case=0)
+
+
+def test_top_level_and_guard_calibration_are_applied_once(tmp_path):
+    path = tmp_path / "cal.json"
+    Calibrator(temperature=5.0, qhat=0.6, alpha=0.1, n=100).save(path)
+    base = {"model": {"type": "callable", "target": "helpers:routing_toy"}, "gate": False, "calibration": str(path)}
+    top = build_guard({**base, "guards": [{"type": "Conformal"}]})
+    both = build_guard({**base, "guards": [{"type": "Conformal", "calibration": str(path)}]})
+    scene = "[USER PROMPT]\nI was charged twice this month."
+    a, b = (g.decide(scene, "Which team?", ["Billing", "Technical", "General"]) for g in (top, both))
+    assert a.action == b.action == Action.ALLOW and a.guards[0].detail == b.guards[0].detail      # 0.1.2: abstain with an empty set
+    other = tmp_path / "other.json"
+    Calibrator(temperature=1.0, qhat=0.6, alpha=0.1, n=100).save(other)
+    with pytest.raises(ValueError, match="different files"):
+        build_guard({**base, "guards": [{"type": "Conformal", "calibration": str(other)}]})

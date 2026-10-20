@@ -76,4 +76,5 @@ creates one, taking `threshold`, `device` and `onnx` from the gate section). `Pr
 (`max_tokens`, `overlap_tokens`, `max_windows`, `margin`, `risk_threshold`; `gate: true` runs the configured gate inside
 every window), `Invariance` (`formats`, `option_transforms`, `option_variants`, `question_variants`, `tolerance`) and
 `Conformal` (`calibration: path.json`, or the top-level `calibration`). A top-level `calibration: path.json` also wraps
-the model in `Calibrated`. See [robustness.md](robustness.md).
+the model in `Calibrated`; with both, the guard reuses the top-level calibrator (the temperature is applied once), and
+two different files are an error. See [robustness.md](robustness.md).

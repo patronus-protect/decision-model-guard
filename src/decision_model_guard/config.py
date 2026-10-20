@@ -200,7 +200,10 @@ def build_guard(config: dict[str, Any] | str | Path, model: DecisionModel | None
             src = gc.pop("calibration", None)
             if src is None and calibrator is None:
                 raise ValueError("Conformal needs 'calibration: path.json' (on the guard or at the top level)")
-            gc["calibrator"] = Calibrator.load(src) if src else calibrator
+            if src and calibrator is not None and Path(src).resolve() != Path(cfg["calibration"]).resolve():
+                raise ValueError("the Conformal guard and the top-level calibration name different files; the model is "
+                                 "calibrated with the top-level one, so give the guard the same file or none")
+            gc["calibrator"] = calibrator if calibrator is not None else Calibrator.load(src)   # one calibration, applied once
         if t == "Coverage" and gc.get("gate") is True:            # erase-and-check inside every window with the configured gate
             gc["gate"] = gate
         guards.append(_make(f"guard {t}", GUARDS[t], gc))
