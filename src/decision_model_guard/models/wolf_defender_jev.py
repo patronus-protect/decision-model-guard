@@ -48,6 +48,11 @@ class WolfDefenderJev:
         ONNX Runtime adapter WolfDefenderJevONNX (keyword arguments: threads, providers, max_tokens, max_sq)."""
         if onnx is not None:
             return WolfDefenderJevONNX.from_pretrained(repo_or_path, onnx, revision=revision, **kw)
+        try:                                                  # before downloading 600 MB of PyTorch weights
+            require("torch", "hf")
+            require("transformers", "hf")
+        except ImportError as e:
+            raise ImportError(f"{e}, or run the model on ONNX Runtime: WolfDefenderJev.from_pretrained(onnx='int8_int4_embeddings')") from None
         if os.path.isdir(repo_or_path):
             folder = repo_or_path
         else:

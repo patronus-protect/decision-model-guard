@@ -15,9 +15,28 @@ CFG = {"model": {"type": "callable", "target": "helpers:refund_toy"},
        "policy": {"unstable_action": "escalate"}}
 
 
-def test_example_config_parses():
+def test_example_config_parses_runs_without_torch_and_matches_the_docs():
+    from pathlib import Path
     cfg = yaml.safe_load(EXAMPLE_CONFIG)
     assert cfg["model"]["type"] == "wolf_defender_jev" and cfg["gate"]["selector"] == "detector"
+    assert all(m.get("onnx") for m in [cfg["model"]] + [x for x in cfg["scanners"] if x["type"] in ("PromptInjection", "ClaimDetector")])
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "configuration.md").read_text()
+    assert EXAMPLE_CONFIG in doc                                         # docs/configuration.md shows what init-config writes
+
+
+def test_pytorch_jev_needs_torch_before_any_download(monkeypatch):
+    import builtins
+
+    from decision_model_guard.models import WolfDefenderJev
+    real = builtins.__import__
+    def no_torch(name, *a, **kw):
+        if name == "torch" or name.startswith("torch."):
+            raise ImportError("No module named 'torch'")
+        return real(name, *a, **kw)
+    monkeypatch.setattr(builtins, "__import__", no_torch)
+    monkeypatch.setattr("importlib.import_module", lambda n, *a: no_torch(n))
+    with pytest.raises(ImportError, match=r"decision-model-guard\[hf\].*onnx="):   # 0.1.2 downloaded 604 MB first
+        WolfDefenderJev.from_pretrained("patronus-studio/wolf-defender-jev")
 
 
 def test_build_guard_from_dict_and_class_target():

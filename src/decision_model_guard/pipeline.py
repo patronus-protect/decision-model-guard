@@ -71,12 +71,21 @@ class DecisionGuard:
                 onnx: str | None = None, **kw) -> DecisionGuard:
         """Recommended setup: rule-based scanners, claim detector, full check for risky and ordered decisions, detector-led
         check for unordered ones (where the full check falls back too often). `onnx` runs the claim detector on ONNX
-        Runtime ("int8_int4_embeddings" is the 96 MB variant); combine it with WolfDefenderJev.from_pretrained(onnx=...)
-        for a setup without torch."""
+        Runtime ("int8_int4_embeddings" is the 96 MB variant, also used when torch is not installed); combine it with
+        WolfDefenderJev.from_pretrained(onnx=...) for a setup without torch. The detector is loaded (and downloaded) here."""
         from .input_scanners import ClaimDetector, ForgedTrustBlock, InvisibleText, VerdictTokens
         det = ClaimDetector(threshold=detector_threshold, device=device, onnx=onnx)
         return cls(model, scanners=[InvisibleText(), ForgedTrustBlock(), VerdictTokens(), det],
-                   gate=SteeringGate(selector="detector", detector=det, threshold=detector_threshold, scope="unordered"), **kw)
+                   gate=SteeringGate(selector="detector", detector=det, threshold=detector_threshold, scope="unordered"), **kw).warmup()
+
+    def warmup(self) -> DecisionGuard:
+        """Load the scanner and detector models now instead of on first use, so a missing extra or a failed download shows
+        up here and the first decision is not slow. `default()` and the server call it."""
+        for x in {id(x): x for x in [*self.scanners, getattr(self.gate, "detector", None)]}.values():
+            load = getattr(x, "_load", None)
+            if callable(load):
+                load()
+        return self
 
     # ------------------------------------------------------------------ scanning
     def scan(self, scene: str | Scene) -> tuple[str, list[ScanResult]]:

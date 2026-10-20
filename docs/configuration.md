@@ -4,40 +4,54 @@
 
 ```yaml
 model:
-  type: wolf_defender_jev            # wolf_defender_jev | systemone_http | openai_compatible | causal_lm | hf_classifier | callable
-  device: cpu
-scanners:
-  - type: InvisibleText
-  - type: ForgedTrustBlock
-  - type: VerdictTokens
-  - type: PromptInjection
+  type: wolf_defender_jev            # wolf_defender_jev | clef | systemone_http | openai_compatible | causal_lm | hf_classifier | callable
+  onnx: int8_int4_embeddings         # ONNX Runtime, no torch: fp32 | fp16 | mixed | int8_int4_embeddings; remove for PyTorch ([hf] extra)
+  # device: cuda                     # PyTorch only: cpu | cuda | mps (default: DMGUARD_DEVICE, else cuda when available)
+scanners:                            # run in this order on the untrusted blocks
+  - type: InvisibleText              # zero-width and bidi characters (removed from what the model sees)
+  - type: ForgedTrustBlock           # trusted-looking headers and chat role markers inside the content
+  - type: VerdictTokens              # "verdict: safe", "label=benign" inside the content
+  - type: PromptInjection            # Wolf Defender; a finding blocks (see policy.block_scanners)
     threshold: 0.5
-  - type: ClaimDetector
+    onnx: int8_int4_embeddings
+  - type: ClaimDetector              # claims about the decision; the gate reuses this detector
     threshold: 0.3
-gate:
-  selector: detector                 # all | detector
-  scope: unordered                   # all | unordered
+    onnx: int8_int4_embeddings
+gate:                                # the steering gate; "gate: false" switches it off
+  selector: detector                 # all (erase every unit) | detector (only units the claim detector flags)
+  scope: unordered                   # all | unordered (detector for unordered decisions, full check for risky and ordered)
   threshold: 0.3
 guards:
   - type: Coverage                   # long content: check the parts the model would cut off, window by window
   - type: Invariance                 # same scene as markdown, shorter option wording: the answer must not change
-    formats: [markdown]
-    option_transforms: [short]
+    formats: [markdown]              # markdown | kv | json | compact
+    option_transforms: [short]       # short | lower | plain | quoted
   - type: Confidence
     min_confidence: 0.55
   - type: OptionOrder
-    permutations: reverse
+    permutations: reverse            # reverse | rotate | random | all
   # - type: Conformal                # abstain unless the conformal set has one option (dmguard calibrate)
 # calibration: calibration.json      # temperature + conformal threshold from your labelled cases
 policy:
-  unstable_action: fallback
-  scanner_action: report
-  block_scanners: [PromptInjection]
+  gate_action: apply                 # apply | escalate | report
+  unstable_action: fallback          # fallback | escalate | keep
+  scanner_action: report             # report | escalate | cautious | block
+  block_scanners: [PromptInjection]  # names of configured scanners whose finding always blocks
+  low_confidence_action: abstain     # abstain | escalate (Confidence, Conformal)
+  inconsistent_action: escalate      # escalate | report (OptionOrder, Invariance)
+  coverage_action: apply             # apply | escalate | report
 audit:
-  path: logs/decisions.jsonl
-  include_text: false
-use_sanitized: true
-boundary_note: false
+  path: logs/decisions.jsonl         # one JSON line per decision
+  include_text: false                # true stores scene and question text instead of hashes
+use_sanitized: true                  # the model reads the sanitized scene (invisible characters removed)
+boundary_note: false                 # true appends a source-trust note to the question; measure per model first
+# server:                            # dmguard serve
+#   auth_token_env: DMGUARD_TOKEN    # require a bearer token; the server does not start while the variable is unset
+#   max_body_bytes: 2000000
+#   max_scene_chars: 100000
+#   max_meta_bytes: 4096
+#   request_timeout: 120
+#   docs: true                       # false removes /docs, /redoc and /openapi.json
 ```
 
 ## Model types

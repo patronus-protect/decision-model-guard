@@ -1,12 +1,15 @@
 # dmguard serve --config examples/dmguard.yml
 model:
   type: wolf_defender_jev
+  onnx: int8_int4_embeddings
 scanners:
   - type: InvisibleText
   - type: ForgedTrustBlock
   - type: VerdictTokens
   - type: PromptInjection
+    onnx: int8_int4_embeddings
   - type: ClaimDetector
+    onnx: int8_int4_embeddings
 gate:
   selector: detector
   scope: unordered

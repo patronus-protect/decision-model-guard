@@ -1,10 +1,12 @@
 """Model-based scanners: prompt injection (Wolf Defender) and the claim detector of the Decision Steering Gate."""
 from __future__ import annotations
 
+import importlib.util
 from collections.abc import Sequence
 
 from ..scene import Block, replace_spans, sentences, units
 from ..types import Finding, ScanResult
+from ..util import log
 from .base import load_classifier
 
 CLAIM_DETECTOR = "patronus-studio/decision-steering-gate"
@@ -45,9 +47,16 @@ class _TorchBackend:
 
 
 def _backend(model_id: str, device: str | None, onnx: str | None, threads: int | None):
+    """PyTorch by default; ONNX Runtime with `onnx`, or when only the `onnx` extra is installed (smallest variant)."""
+    from .._onnx import DEFAULT_VARIANT, OnnxClassifier
+    if onnx is None and not (importlib.util.find_spec("torch") and importlib.util.find_spec("transformers")):
+        if importlib.util.find_spec("onnxruntime") is None:
+            raise ImportError(f"{model_id} needs PyTorch (pip install 'decision-model-guard[hf]') or ONNX Runtime "
+                              "(pip install 'decision-model-guard[onnx]')")
+        log.info("torch is not installed: running %s on ONNX Runtime (%s)", model_id, DEFAULT_VARIANT)
+        onnx = DEFAULT_VARIANT
     if onnx is None:
         return _TorchBackend(model_id, device)
-    from .._onnx import OnnxClassifier
     return OnnxClassifier(model_id, onnx, threads=threads)
 
 
@@ -59,7 +68,7 @@ class PromptInjection:
     injection probability. Default model: Wolf Defender Small; use WOLF_DEFENDER for the larger model.
 
     onnx: run an ONNX variant on ONNX Runtime instead of PyTorch ("fp32", "fp16", "mixed", "int8_int4_embeddings" or a
-    path to an .onnx file); needs the `onnx` extra, no torch."""
+    path to an .onnx file); needs the `onnx` extra, no torch. Without torch installed, "int8_int4_embeddings" is used."""
 
     name = "PromptInjection"
 
@@ -118,7 +127,8 @@ class ClaimDetector:
 
     `redact=True` removes the flagged units from the sanitized text. The gate reuses `score()` to pick what to erase.
     onnx: run an ONNX variant on ONNX Runtime instead of PyTorch ("fp32", "fp16", "mixed", "int8_int4_embeddings" or a
-    path to an .onnx file; the smallest is 96 MB); needs the `onnx` extra, no torch."""
+    path to an .onnx file; the smallest is 96 MB); needs the `onnx` extra, no torch. Without torch installed,
+    "int8_int4_embeddings" is used."""
 
     name = "ClaimDetector"
 
