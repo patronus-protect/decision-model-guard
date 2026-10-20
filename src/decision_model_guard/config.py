@@ -38,8 +38,10 @@
       inconsistent_action: escalate      # escalate | report (OptionOrder, Invariance)
       coverage_action: apply             # apply | escalate | report
     audit:
-      path: logs/decisions.jsonl         # one JSON line per decision
+      path: logs/decisions.jsonl         # one JSON line per decision (relative to this file)
       include_text: false                # true stores scene and question text instead of hashes
+      # backup_count: 5                  # old files kept when the log rotates at max_bytes (50 MB)
+      # hash_key_env: DMGUARD_AUDIT_KEY  # HMAC-SHA256 with this secret instead of plain SHA-256
     use_sanitized: true                  # the model reads the sanitized scene (invisible characters removed)
     boundary_note: false                 # true appends a source-trust note to the question; measure per model first
     # server:                            # dmguard serve

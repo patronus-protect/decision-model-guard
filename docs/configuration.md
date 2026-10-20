@@ -41,8 +41,10 @@ policy:
   inconsistent_action: escalate      # escalate | report (OptionOrder, Invariance)
   coverage_action: apply             # apply | escalate | report
 audit:
-  path: logs/decisions.jsonl         # one JSON line per decision
+  path: logs/decisions.jsonl         # one JSON line per decision (relative to this file)
   include_text: false                # true stores scene and question text instead of hashes
+  # backup_count: 5                  # old files kept when the log rotates at max_bytes (50 MB)
+  # hash_key_env: DMGUARD_AUDIT_KEY  # HMAC-SHA256 with this secret instead of plain SHA-256
 use_sanitized: true                  # the model reads the sanitized scene (invisible characters removed)
 boundary_note: false                 # true appends a source-trust note to the question; measure per model first
 # server:                            # dmguard serve
@@ -70,7 +72,10 @@ Config files are read as UTF-8. Relative paths in a config file are resolved aga
 `repo`, `model` or `onnx` (hub ids stay as they are). Unknown keys, at the top level and inside every section, are an error, and so are `block_scanners` names that are not
 among the configured scanners: a typo must not remove protection. `gate: false` disables the gate. With `selector: detector` the gate reuses a configured `ClaimDetector` scanner (or
 creates one, taking `threshold`, `device` and `onnx` from the gate section). `PromptInjection` and `ClaimDetector` take
-`onnx` as well. `audit` takes `path`, `include_text` and `max_bytes`; `server` takes `auth_token_env` and `max_body_bytes`.
+`onnx` as well. `audit` takes `path`, `include_text`, `max_bytes`, `backup_count` (old files kept on rotation, default 5),
+`max_meta_bytes` (default 4096; larger `meta` is replaced by a note with its size) and `hash_key_env` (an environment
+variable with a secret: HMAC-SHA256 instead of plain SHA-256, so short texts cannot be confirmed by guessing). `meta`
+is written as it is, so keep customer data out of it; `server` takes `auth_token_env` and `max_body_bytes`.
 
 ## Guards
 
