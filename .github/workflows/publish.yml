@@ -7,11 +7,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      id-token: write
+      id-token: write          # PyPI trusted publishing, no API token stored anywhere
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install build && python -m build
+      - name: The release tag matches the package version
+        run: |
+          v=$(python -c "import pathlib, re; print(re.search(r'__version__ = \"(.+?)\"', pathlib.Path('src/decision_model_guard/version.py').read_text()).group(1))")
+          test "${GITHUB_REF_NAME#v}" = "$v" || { echo "tag $GITHUB_REF_NAME does not match version $v"; exit 1; }
+      - name: Tests
+        run: pip install -e ".[server,http,langchain,onnx]" onnx pytest && pytest -q
+      - name: Build and check
+        run: pip install build twine && python -m build && twine check --strict dist/*
       - uses: pypa/gh-action-pypi-publish@release/v1
