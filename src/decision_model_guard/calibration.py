@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import math
+import warnings
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -71,10 +72,19 @@ def fit_temperature(P: Sequence[Sequence[float]], y: Sequence[int]) -> float:
 
 
 def conformal_quantile(scores: Sequence[float], alpha: float) -> float:
-    """Split-conformal threshold: the ceil((n + 1)(1 - alpha))-th smallest nonconformity score."""
+    """Split-conformal threshold: the ceil((n + 1)(1 - alpha))-th smallest nonconformity score (1.0, every option in every
+    set, when there are fewer than `min_cases(alpha)` scores)."""
     n = len(scores)
-    k = math.ceil((n + 1) * (1 - alpha))
+    k = math.ceil((n + 1) * (1 - alpha) - 1e-9)
     return 1.0 if k > n else sorted(scores)[k - 1]
+
+
+def min_cases(alpha: float) -> int:
+    """The smallest number of labelled cases for which a conformal threshold at miss rate `alpha` exists."""
+    n = 1
+    while math.ceil((n + 1) * (1 - alpha) - 1e-9) > n:
+        n += 1
+    return n
 
 
 def collect(model: DecisionModel | DecideBatch, cases: Sequence[dict[str, Any]]) -> tuple[list[list[float]], list[int]]:
@@ -118,13 +128,17 @@ class Calibrator:
             raise ValueError("need one probability list per gold label")
         t = fit_temperature(P, y)
         Pc = [_scale(p, t) for p in P]
-        qhat = conformal_quantile([1 - p[g] for p, g in zip(Pc, y, strict=True)], alpha)
-        sets = [[i for i, v in enumerate(p) if 1 - v <= qhat] for p in Pc]
         metrics = {"cases": len(y), "accuracy": sum(argmax(list(p)) == g for p, g in zip(P, y, strict=True)) / len(y),
-                   "nll_before": _nll(P, y, 1.0), "nll_after": _nll(P, y, t), "ece_before": _ece(P, y), "ece_after": _ece(Pc, y),
-                   "set_coverage": sum(g in s for s, g in zip(sets, y, strict=True)) / len(y),
-                   "singleton_rate": sum(len(s) == 1 for s in sets) / len(y),
-                   "mean_set_size": sum(len(s) for s in sets) / len(y)}
+                   "nll_before": _nll(P, y, 1.0), "nll_after": _nll(P, y, t), "ece_before": _ece(P, y), "ece_after": _ece(Pc, y)}
+        qhat: float | None = None
+        if len(y) < min_cases(alpha):                        # the threshold would be 1.0: every decision would abstain
+            warnings.warn(f"{len(y)} cases are too few for alpha={alpha}: a conformal threshold needs at least {min_cases(alpha)}; "
+                          "the calibrator keeps the temperature and has no conformal threshold", stacklevel=2)
+        else:
+            qhat = conformal_quantile([1 - p[g] for p, g in zip(Pc, y, strict=True)], alpha)
+            sets = [[i for i, v in enumerate(p) if 1 - v <= qhat] for p in Pc]
+            metrics.update({"set_coverage": sum(g in s for s, g in zip(sets, y, strict=True)) / len(y),
+                            "singleton_rate": sum(len(s) == 1 for s in sets) / len(y), "mean_set_size": sum(len(s) for s in sets) / len(y)})
         ops = _operating_points(Pc, y, risky, target_fprs) if risky else []
         return cls(t, qhat, alpha, len(y), metrics, ops, risky, tasks)
 
@@ -155,6 +169,9 @@ class Calibrator:
         if self.qhat is not None:
             lines.append(f"Conformal sets at {100 * (1 - self.alpha):.0f} % coverage: {100 * m.get('singleton_rate', 0):.1f} % single answers, "
                          f"mean set size {m.get('mean_set_size', 0):.2f}")
+        elif self.alpha:
+            lines.append(f"No conformal threshold: {self.n} cases are too few for alpha={self.alpha} (at least {min_cases(self.alpha)} "
+                         "needed); Conformal cannot use this file")
         for op in self.operating_points:
             lines.append(f"Risk threshold {op['threshold']:.4f}: FPR {100 * op['fpr']:.2f} % (target {100 * op['target_fpr']:.1f} %), "
                          f"TPR {100 * op['tpr']:.1f} %")
@@ -217,9 +234,10 @@ class Conformal:
     name = "Conformal"
 
     def __init__(self, calibrator: Calibrator | str | Path):
-        self.calibrator = calibrator if isinstance(calibrator, Calibrator) else Calibrator.load(calibrator)
-        if self.calibrator.qhat is None:
-            raise ValueError("the calibrator has no conformal threshold; fit it with alpha")
+        self.calibrator = c = calibrator if isinstance(calibrator, Calibrator) else Calibrator.load(calibrator)
+        if c.qhat is None or c.qhat >= 1.0:                  # 1.0: every option always in the set (too few cases)
+            need = f"; alpha={c.alpha} needs at least {min_cases(c.alpha)} labelled cases" if c.alpha else ""
+            raise ValueError(f"the calibrator has no usable conformal threshold (fitted on {c.n} cases{need}); refit it with alpha")
 
     def check(self, model: DecisionModel, scene: str, question: str, options: Sequence[str], probs: Sequence[float], kind: Kind,
               **_ctx) -> GuardReport:

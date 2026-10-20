@@ -293,3 +293,22 @@ def test_top_level_and_guard_calibration_are_applied_once(tmp_path):
     Calibrator(temperature=1.0, qhat=0.6, alpha=0.1, n=100).save(other)
     with pytest.raises(ValueError, match="different files"):
         build_guard({**base, "guards": [{"type": "Conformal", "calibration": str(other)}]})
+
+
+def test_too_few_calibration_cases_give_no_threshold_instead_of_abstaining_always(tmp_path, capsys):
+    from decision_model_guard.calibration import min_cases
+    P, y = _synthetic(10, 0)
+    with pytest.warns(UserWarning, match="at least 19"):
+        cal = Calibrator.fit_probs(P, y, alpha=0.05)                  # 0.1.2: qhat 1.0, every decision abstained
+    assert cal.qhat is None and cal.temperature > 0 and "too few" in cal.summary() and min_cases(0.1) == 9
+    with pytest.raises(ValueError, match="at least 19"):
+        Conformal(cal)
+    with pytest.raises(ValueError):
+        Conformal(Calibrator(temperature=1.0, qhat=1.0, alpha=0.05, n=12))   # a 0.1.2 file
+    cfg = tmp_path / "c.yml"
+    cfg.write_text(yaml.safe_dump({"model": {"type": "callable", "target": "helpers:refund_toy"}}))
+    cases = tmp_path / "cases.jsonl"
+    cases.write_text("\n".join(json.dumps(c) for c in load_cases()) + "\n")
+    with pytest.warns(UserWarning):
+        assert main(["calibrate", "--config", str(cfg), "--cases", str(cases), "--alpha", "0.05", "--out", str(tmp_path / "o.json")]) == 0
+    assert "No conformal threshold: 12 cases are too few" in capsys.readouterr().out

@@ -76,7 +76,9 @@ guard = DecisionGuard(Calibrated(model, cal), guards=[Conformal(cal)])
   option in the set is a decision; two or more, or none, means the model cannot decide at that coverage, and the policy
   abstains or escalates (`low_confidence_action`). `cal.evaluate(model, heldout)` checks the coverage on held-out cases.
   The guarantee only covers the questions the calibrator was fitted on; `Conformal` skips other questions and says so
-  in its report. Fit one calibrator per decision task, or one on a mix of all the tasks you guard.
+  in its report. Fit one calibrator per decision task, or one on a mix of all the tasks you guard. A threshold needs
+  at least ceil(1/alpha) - 1 cases (19 for alpha 0.05, 9 for 0.1); with fewer, `fit` and `dmguard calibrate` warn and
+  save the temperature without a threshold, and `Conformal` refuses the file instead of abstaining on everything.
 - **Operating points**: for risky decisions `fit` also reports the risk threshold that keeps the false-positive rate at
   0.1, 1, 5 and 10 % on your cases, with the recall at that threshold.
 

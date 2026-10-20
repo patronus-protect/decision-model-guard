@@ -116,7 +116,7 @@ def cmd_calibrate(args) -> int:
     model = build_model(cfg["model"])                             # the bare model: calibration is fitted on raw probabilities
     cal = Calibrator.fit(model, load_cases(args.cases), alpha=args.alpha)
     print(cal.summary())
-    if args.test:
+    if args.test and cal.qhat is not None:
         ev = cal.evaluate(model, load_cases(args.test))
         print(f"Held-out: coverage {100 * ev['coverage']:.1f} % (target {100 * (1 - args.alpha):.0f} %), "
               f"{100 * ev['singleton_rate']:.1f} % single answers, accuracy of single answers {100 * ev['singleton_accuracy']:.1f} %")
