@@ -23,6 +23,8 @@ class Policy:
     inconsistent_action:  OptionOrder or Invariance guard triggered: "escalate" or "report"
     coverage_action:      Coverage guard found a window of long content that moves the decision: "apply" (risky/ordered:
                           take the window's more cautious answer; unordered: fallback), "escalate" or "report"
+    incomplete_coverage_action: Coverage checked only part of long content (max_windows) or could not run (unknown
+                          context size): "report" (a reason) or "escalate"
     fallback_option:      default fallback option index for unordered decisions (a per-decision fallback wins)
 
     Confidence and Conformal guards use low_confidence_action."""
@@ -34,12 +36,14 @@ class Policy:
     low_confidence_action: str = "abstain"
     inconsistent_action: str = "escalate"
     coverage_action: str = "apply"
+    incomplete_coverage_action: str = "report"
     fallback_option: int | None = None
 
     def __post_init__(self):
         checks = {"gate_action": ("apply", "escalate", "report"), "unstable_action": ("fallback", "escalate", "keep"),
                   "scanner_action": ("report", "escalate", "cautious", "block"), "low_confidence_action": ("abstain", "escalate"),
-                  "inconsistent_action": ("escalate", "report"), "coverage_action": ("apply", "escalate", "report")}
+                  "inconsistent_action": ("escalate", "report"), "coverage_action": ("apply", "escalate", "report"),
+                  "incomplete_coverage_action": ("report", "escalate")}
         for k, allowed in checks.items():
             if getattr(self, k) not in allowed:
                 raise ValueError(f"{k} must be one of {allowed}")
@@ -105,8 +109,18 @@ class Policy:
             reasons.append(f"content scanners: {gate.unerased} flagged piece(s) could not be erased")
             raise_to(Action.ESCALATE)
         for g in guards:
-            if g.guard == "Coverage" and g.detail.get("truncated") and not g.triggered:
-                reasons.append(f"long content: {g.detail.get('windows', 0)} windows checked, none moves the decision")
+            if g.guard == "Coverage":
+                covered, incomplete = g.detail.get("covered"), False
+                if g.detail.get("skipped"):
+                    reasons.append(f"long content: Coverage did not run ({g.detail['skipped']})")
+                    incomplete = True
+                elif g.detail.get("truncated") and covered is not None and covered < 1.0:
+                    reasons.append(f"long content: only {100 * covered:.0f} % checked in {g.detail.get('windows', 0)} windows (max_windows)")
+                    incomplete = True
+                elif g.detail.get("truncated") and not g.triggered:
+                    reasons.append(f"long content: {g.detail.get('windows', 0)} windows checked, none moves the decision")
+                if incomplete and self.incomplete_coverage_action == "escalate":
+                    raise_to(Action.ESCALATE)
             if not g.triggered:
                 continue
             if g.guard == "Coverage":

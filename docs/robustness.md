@@ -26,6 +26,9 @@ guard = DecisionGuard.default(model, guards=[Coverage()])
 - `Coverage(gate=SteeringGate())` runs erase-and-check inside every window, for claims that sit in the same window as the
   content they hide (more calls).
 - Scenes that fit cost nothing. Policy: `coverage_action` = `apply` (default), `escalate` or `report`.
+- When `max_windows` ends before the content does, the reasons say how much was checked ("only 12 % checked in 2
+  windows"); when the context size is unknown, they say that Coverage did not run. `incomplete_coverage_action:
+  escalate` turns both into an escalation.
 
 Measured with Wolf Defender Jev (ONNX, context 6,144 tokens): a tool output of 7,856 tokens with an injected instruction
 after token 2,729, so inside the part the model drops. Model alone: probability of "injection" 0.035. With `Coverage`:

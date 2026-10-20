@@ -312,3 +312,18 @@ def test_too_few_calibration_cases_give_no_threshold_instead_of_abstaining_alway
     with pytest.warns(UserWarning):
         assert main(["calibrate", "--config", str(cfg), "--cases", str(cases), "--alpha", "0.05", "--out", str(tmp_path / "o.json")]) == 0
     assert "No conformal threshold: 12 cases are too few" in capsys.readouterr().out
+
+
+def test_partial_or_skipped_coverage_is_reported():
+    from decision_model_guard import FunctionModel, Policy
+    filler = " ".join(f"Line {i} of the shipping log is routine." for i in range(400))
+    scene = "[SYSTEM CONTEXT]\nRouter.\n\n[USER PROMPT]\n" + filler
+    m = FunctionModel(lambda s, q, o: [[0.8, 0.1, 0.1]] * len(s))
+    m.context_tokens = 300
+    d = DecisionGuard(m, guards=[Coverage(max_windows=2)]).decide(scene, "Which team?", ["Billing.", "Technical.", "General."], fallback=1)
+    assert any(r.startswith("long content: only ") and "checked in 2 windows" in r for r in d.reasons)      # 0.1.2: "none moves"
+    assert d.action == Action.ALLOW
+    strict = DecisionGuard(m, guards=[Coverage(max_windows=2)], policy=Policy(incomplete_coverage_action="escalate"))
+    assert strict.decide(scene, "Which team?", ["Billing.", "Technical.", "General."]).action == Action.ESCALATE
+    plain = DecisionGuard(lambda s, q, o: [[0.8, 0.1, 0.1]] * len(s), guards=[Coverage()]).decide(scene, "Which team?", ["a", "b", "c"])
+    assert any("Coverage did not run" in r for r in plain.reasons)       # 0.1.2: no reason at all

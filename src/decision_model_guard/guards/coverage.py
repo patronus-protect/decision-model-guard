@@ -97,8 +97,8 @@ class Coverage:
               *, risky: Sequence[int] | None = None, order: Sequence[int] | None = None, fallback: int | None = None,
               blocks: Sequence[Block] | None = None) -> GuardReport:
         budget, count = self._budget(model)
-        if not budget:
-            return GuardReport(self.name, False, detail={"skipped": "unknown context size: pass max_tokens"})
+        if not budget:                                          # the policy reports it: an unchecked long scene is not "covered"
+            return GuardReport(self.name, False, detail={"skipped": "unknown context size: pass Coverage(max_tokens=...)"})
         n = count(scene)
         if n <= budget:
             return GuardReport(self.name, False, detail={"truncated": False, "tokens": n, "budget": budget})

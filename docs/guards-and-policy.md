@@ -49,6 +49,7 @@ arguments gets them; older guards with the six positional parameters keep workin
 | `low_confidence_action` | `abstain`, `escalate` (Confidence, Conformal) | `abstain` |
 | `inconsistent_action` | `escalate`, `report` (OptionOrder, Invariance) | `escalate` |
 | `coverage_action` | `apply`, `escalate`, `report` (Coverage: take the more cautious window answer, fallback for unordered decisions) | `apply` |
+| `incomplete_coverage_action` | `report`, `escalate` (Coverage checked only part of the content within `max_windows`, or could not run because the model's context size is unknown; both always add a reason) | `report` |
 | `fallback_option` | option index | `None` (a per-decision `fallback=` wins) |
 
 The final action is the most severe one triggered: block > abstain > escalate > fallback > cautious > allow.
