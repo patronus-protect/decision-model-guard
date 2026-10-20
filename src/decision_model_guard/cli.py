@@ -14,6 +14,13 @@ def _guard(args):
     return build_guard(args.config)
 
 
+def _positive(v: str) -> int:
+    n = int(v)
+    if n < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return n
+
+
 def _read(args) -> str:
     if getattr(args, "text", None):
         return args.text
@@ -88,6 +95,10 @@ def cmd_audit(args) -> int:
         Path(args.markdown).write_text(md, encoding="utf-8")
     if args.max_attack_success is not None:                       # for CI: fail when an attack gets through too often
         worst = rep.attack_rates(guarded=not args.no_guard)
+        if not worst:                                             # nothing measured is not a pass
+            print("no attack check ran on any case (empty case file, cases the model answers wrongly, or no attack checks "
+                  "selected), so --max-attack-success cannot pass", file=sys.stderr)
+            return 2
         over = {k: r for k, r in worst.items() if r > args.max_attack_success}
         if over:
             print("attack success above the limit: " + ", ".join(f"{k} {100 * r:.1f} %" for k, r in over.items()), file=sys.stderr)
@@ -164,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         if name == "audit":
             q.add_argument("--cases", help="JSONL cases (default: bundled samples)")
             q.add_argument("--check", action="append", help="run only these checks (repeatable)")
-            q.add_argument("--per-case", type=int, default=2, help="variants per check and case")
+            q.add_argument("--per-case", type=_positive, default=2, help="variants per check and case")
             q.add_argument("--padding-tokens", type=int, help="filler per side for the padding check (default: 1.2 x model context)")
             q.add_argument("--no-guard", action="store_true", help="measure the model alone")
             q.add_argument("--seed", type=int, default=0)

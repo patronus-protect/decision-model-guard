@@ -89,7 +89,7 @@ with your guard:
 
 ```bash
 dmguard audit --config dmguard.yml --cases my_cases.jsonl --markdown audit.md --out audit.json
-dmguard audit --config dmguard.yml --max-attack-success 0.05      # exit code 2 above 5 %: use it in CI
+dmguard audit --config dmguard.yml --max-attack-success 0.05      # exit code 2 above 5 %, or when no attack ran: use it in CI
 ```
 
 ```python

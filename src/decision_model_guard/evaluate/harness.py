@@ -35,10 +35,48 @@ def _data(name: str) -> str:
     return resources.files("decision_model_guard.evaluate").joinpath("data", name).read_text(encoding="utf-8")
 
 
+def check_case(c: Any, where: str = "case") -> dict[str, Any]:
+    """Raise ValueError (naming `where`) unless `c` follows the case format."""
+    def fail(msg: str):
+        raise ValueError(f"{where}: {msg}")
+    if not isinstance(c, dict):
+        fail("a case must be a JSON object")
+    for k in ("scene", "question"):
+        if not isinstance(c.get(k), str):
+            fail(f"'{k}' must be a string")
+    opts = c.get("options")
+    if not isinstance(opts, list) or len(opts) < 2 or not all(isinstance(o, str) and o.strip() for o in opts) or len(set(opts)) != len(opts):
+        fail("'options' must be a list of at least two distinct, non-empty strings")
+    n = len(opts)
+    idx = lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v < n  # noqa: E731
+    for k in ("gold", "fallback", "target"):
+        if (k == "gold" or c.get(k) is not None) and not idx(c.get(k)):
+            fail(f"'{k}' must be an option index from 0 to {n - 1}, got {c.get(k)!r}")
+    risky, order = c.get("risky"), c.get("order")
+    if risky is not None and (not isinstance(risky, list) or not risky or not all(idx(i) for i in risky) or len(set(risky)) == n):
+        fail("'risky' must be a list of option indices that leaves at least one option out")
+    if order is not None and (not isinstance(order, list) or not all(idx(i) for i in order) or sorted(order) != list(range(n))):
+        fail(f"'order' must list every option index from 0 to {n - 1} once, most cautious first")
+    if risky and order:
+        fail("a case has 'risky' or 'order', not both")
+    return c
+
+
 def load_cases(path: str | Path | None = None) -> list[dict[str, Any]]:
-    """Cases from a JSONL file; without a path the bundled sample cases."""
-    text = Path(path).read_text(encoding="utf-8") if path else _data("sample_cases.jsonl")
-    return [json.loads(line) for line in text.splitlines() if line.strip()]
+    """Cases from a JSONL file (UTF-8, a byte order mark is fine); without a path the bundled sample cases. Every line is
+    checked (`check_case`); errors name the file and the line."""
+    text = Path(path).read_text(encoding="utf-8-sig") if path else _data("sample_cases.jsonl")
+    where = str(path) if path else "sample_cases.jsonl"
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            c = json.loads(line)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{where} line {i}: not a JSON object on one line ({e.msg})") from None
+        out.append(check_case(c, f"{where} line {i}"))
+    return out
 
 
 def claim_bank() -> dict[str, Any]:

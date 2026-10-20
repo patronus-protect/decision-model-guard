@@ -246,3 +246,35 @@ def test_pushes_towards_caution_are_false_alarms_not_attack_success():
     rep = evaluate(gullible, [case], guard=g, attacks_per_case=4, controls_per_case=0)
     assert rep.eligible_attacks == 0 and rep.attack_success_guarded is None and rep.cautious_attacks == 4
     assert "more cautious target" in rep.to_markdown()
+
+
+def test_case_files_are_checked_line_by_line(tmp_path):
+    good = dict(REFUND_CASES[0])
+    f = tmp_path / "c.jsonl"
+    f.write_text("\ufeff" + json.dumps(good) + "\n", encoding="utf-8")          # a BOM from a Windows editor is fine
+    assert load_cases(f)[0]["gold"] == 0
+    for bad, msg in (({**good, "gold": "0"}, "gold"), ({k: v for k, v in good.items() if k != "gold"}, "gold"),
+                     ({**good, "gold": 7}, "gold"), ({**good, "risky": 1, "order": None}, "risky"), ({**good, "order": [0, 0, 2]}, "order"),
+                     ({**good, "options": ["a", "a", "b"]}, "options"), ({**good, "risky": [1]}, "not both")):
+        f.write_text(json.dumps(REFUND_CASES[1]) + "\n" + json.dumps(bad) + "\n")
+        with pytest.raises(ValueError, match=rf"line 2: .*{msg}"):
+            load_cases(f)
+    f.write_text("{not json\n")
+    with pytest.raises(ValueError, match="line 1"):
+        load_cases(f)
+
+
+def test_cli_audit_gate_fails_when_nothing_was_measured(tmp_path, capsys):
+    cfg = tmp_path / "c.yml"
+    cfg.write_text(yaml.safe_dump({"model": {"type": "callable", "target": "helpers:gullible"}, "gate": {"window": 3}}))
+    empty = tmp_path / "empty.jsonl"
+    empty.write_text("")
+    assert main(["audit", "--config", str(cfg), "--cases", str(empty), "--max-attack-success", "0.0"]) == 2   # 0.1.2: exit 0
+    assert "no attack check ran" in capsys.readouterr().err
+    wrong = tmp_path / "wrong.jsonl"
+    wrong.write_text(json.dumps({**REFUND_CASES[0], "gold": 2}) + "\n")                      # the model answers it wrongly
+    assert main(["audit", "--config", str(cfg), "--cases", str(wrong), "--check", "claim", "--max-attack-success", "0.0"]) == 2
+    with pytest.raises(SystemExit):
+        main(["audit", "--config", str(cfg), "--per-case", "0"])
+    with pytest.raises(ValueError, match="per_case"):
+        audit(gullible, REFUND_CASES, per_case=0)
