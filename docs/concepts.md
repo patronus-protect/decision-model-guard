@@ -58,7 +58,7 @@ ordered decisions, where it costs almost no decisions.
 
 | Action | Meaning |
 |---|---|
-| `allow` | the model's answer stands |
+| `allow` | the model's answer stands; reasons, if any, are informational (for example scanner findings under `scanner_action: report`) |
 | `cautious` | the answer was moved to the cautious side |
 | `fallback` | an unstable unordered decision went to the fallback option |
 | `escalate` | the answer is returned but should be reviewed by a human |

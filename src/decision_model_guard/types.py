@@ -17,7 +17,7 @@ class Kind(str, enum.Enum):
 class Action(str, enum.Enum):
     """What the pipeline did with the decision."""
 
-    ALLOW = "allow"            # the model's answer stands, nothing triggered
+    ALLOW = "allow"            # the model's answer stands; reasons, if any, are informational (scanner_action="report")
     CAUTIOUS = "cautious"      # the answer was moved to the cautious side (gate or policy)
     FALLBACK = "fallback"      # an unstable unordered decision went to the fallback option
     ESCALATE = "escalate"      # the answer is returned but should go to a human
