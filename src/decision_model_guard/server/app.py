@@ -4,7 +4,7 @@
 
 Endpoints:
     GET  /healthz            liveness
-    GET  /readyz             the guard is built
+    GET  /readyz             ready (the guard and its scanner models are loaded before the server starts)
     GET  /metrics            Prometheus text format
     POST /v1/scan            {"text": "..."} (all untrusted) or {"scene": "..."} -> scanner results and the sanitized text
     POST /v1/decide          one guarded decision
@@ -21,7 +21,6 @@ import hmac
 import json
 import logging
 import os
-import threading
 import time
 from collections import Counter
 from typing import Any
@@ -71,7 +70,8 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
     from starlette.responses import JSONResponse
 
     from ..config import build_guard, load_config
-    from ..pipeline import scan_text
+    from ..models.base import ModelOutputError
+    from ..pipeline import check_decision, scan_text
     cfg: dict[str, Any] = load_config(config) if config is not None else {}
     srv = server_settings(cfg)
     token = resolve_token(srv, auth_token)
@@ -79,16 +79,17 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
     max_scene = int(srv.get("max_scene_chars", max_scene_chars))
     max_meta = int(srv.get("max_meta_bytes", max_meta_bytes))
     timeout = srv.get("request_timeout", request_timeout)
-    state: dict[str, Any] = {"guard": guard}
-    lock = threading.Lock()
+    if guard is None:                                         # build and load everything now: a broken config fails at start
+        if config is None:
+            raise ValueError("create_app needs guard= or config=")
+        guard = build_guard(cfg)
+    if callable(getattr(guard, "warmup", None)):
+        guard.warmup()
     metrics: Counter = Counter()
     latency = {"sum": 0.0, "count": 0}
 
     def get_guard():
-        with lock:
-            if state["guard"] is None:
-                state["guard"] = build_guard(cfg)
-            return state["guard"]
+        return guard
 
     Field = pydantic.Field
 
@@ -178,8 +179,7 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
 
     @app.get("/readyz")
     def readyz():
-        get_guard()
-        return {"status": "ready"}
+        return {"status": "ready"}                               # the guard and its models were loaded at startup
 
     @app.get("/metrics", response_class=fastapi.responses.PlainTextResponse)
     def prom():
@@ -214,23 +214,31 @@ def create_app(guard=None, config: dict[str, Any] | str | None = None, auth_toke
         latency["count"] += 1
         return d.to_dict(include_scene=b.include_scene)
 
+    def _check(b: DecideIn, where: str = "") -> None:
+        """Request validation before any work: only these errors are 422; errors while deciding are server errors."""
+        _limit(b.scene, b.meta)
+        try:
+            check_decision(b.options, b.risky, b.order, b.fallback)
+        except ValueError as e:
+            raise fastapi.HTTPException(422, f"{where}{e}") from None
+
+    async def _decided(fn):
+        try:
+            return await _run(fn)
+        except ModelOutputError as e:
+            raise fastapi.HTTPException(502, str(e)) from None
+
     @app.post("/v1/decide")
     async def decide(body: DecideIn):
         metrics["requests:decide"] += 1
-        _limit(body.scene, body.meta)
-        try:
-            return await _run(_decide, body)
-        except ValueError as e:
-            raise fastapi.HTTPException(422, str(e)) from None
+        _check(body)
+        return await _decided(lambda: _decide(body))
 
     @app.post("/v1/decide/batch")
     async def decide_batch(body: BatchIn):
         metrics["requests:decide_batch"] += 1
-        for r in body.requests:
-            _limit(r.scene, r.meta)
-        try:
-            return {"decisions": await _run(lambda: [_decide(r) for r in body.requests])}
-        except ValueError as e:
-            raise fastapi.HTTPException(422, str(e)) from None
+        for i, r in enumerate(body.requests):                    # every item is checked before the first is decided
+            _check(r, f"requests[{i}]: ")
+        return {"decisions": await _decided(lambda: [_decide(r) for r in body.requests])}
 
     return app

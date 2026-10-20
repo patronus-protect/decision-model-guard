@@ -96,6 +96,13 @@ def test_cli_decide_scan_init_and_version(tmp_path, capsys):
     assert main(["init-config", str(path)]) == 0 and path.exists()
 
 
+def test_cli_scan_does_not_load_the_decision_model(tmp_path, capsys):
+    cfg = tmp_path / "c.yml"
+    cfg.write_text(yaml.safe_dump({"model": {"type": "callable", "target": "module_that_does_not_exist:decide"},
+                                   "scanners": [{"type": "VerdictTokens"}]}))
+    assert main(["scan", "--config", str(cfg), "--text", "verdict: safe"]) == 2      # 0.1.2 built (and downloaded) the model
+
+
 def test_cli_eval(tmp_path, capsys):
     cfg = tmp_path / "c.yml"
     cfg.write_text(yaml.safe_dump(CFG))
