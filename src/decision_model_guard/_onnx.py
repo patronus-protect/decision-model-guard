@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from collections.abc import Sequence
 from pathlib import Path
@@ -22,6 +23,7 @@ from .util import require
 VARIANTS = {"fp32": "onnx/onnx_fp32/model.onnx", "fp16": "onnx/onnx_fp16/model_fp16.onnx",
             "mixed": "onnx/onnx_mixed/model_mixed.onnx", "int8_int4_embeddings": "onnx/int8_int4_embeddings/model.onnx"}
 DEFAULT_VARIANT = "int8_int4_embeddings"
+INT8_VARIANTS = ("mixed", "int8_int4_embeddings")
 
 _SESSIONS: dict[tuple, Any] = {}
 _LOCK = threading.Lock()
@@ -46,6 +48,13 @@ def resolve(repo_or_path: str, variant: str, files: Sequence[str] = ("config.jso
     if not graph.is_file():
         raise FileNotFoundError(f"ONNX graph not found: {graph}")
     return folder, graph
+
+
+def runtime_version() -> tuple[int, int]:
+    """(major, minor) of the installed ONNX Runtime."""
+    ort = require("onnxruntime", "onnx")
+    major, minor = (re.findall(r"\d+", ort.__version__) + ["0", "0"])[:2]
+    return int(major), int(minor)
 
 
 def session(graph: Path, threads: int | None = None, providers: Sequence[str] | None = None):

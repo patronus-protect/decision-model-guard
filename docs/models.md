@@ -26,7 +26,10 @@ model = WolfDefenderJev.from_pretrained("/path/to/folder", onnx="fp32", threads=
 
 `onnx` is one of `fp32`, `fp16`, `mixed`, `int8_int4_embeddings` (118 MB, the default of `WolfDefenderJevONNX`) or a path
 to an `.onnx` file; only that graph is downloaded. FP32 and FP16 give the same answers as the PyTorch weights; the INT8
-graphs agree on 99.2 to 99.3 % of held-out stress decisions. Truncation and token-budget batching are the same as on
+graphs agree on 99.2 to 99.3 % of held-out stress decisions with a current ONNX Runtime. On ONNX Runtime 1.23 (the
+last version for Python 3.10, Intel Macs and macOS 13) the INT8 kernels agree less often (110 and 113 of the 120
+decisions in `scripts/onnx_agreement.py`, against 119 and 118 from 1.24), and loading an INT8 variant warns; use `fp16`
+there. Truncation and token-budget batching are the same as on
 PyTorch. `threads` and `providers` go to the ONNX Runtime session.
 
 ## Jev-like HTTP endpoints

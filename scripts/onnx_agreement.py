@@ -5,7 +5,8 @@
 
 Per case: the original scene, five planted claims (suffix, prefix, middle), two neutral sentences and the scene as markdown
 and JSON, 120 decisions in all. Prints the share of decisions on which each variant picks the same option as fp32, per
-decision type. The INT8 kernels differ between ONNX Runtime versions and CPUs, so measure on the setup you deploy.
+decision type. The INT8 kernels differ between ONNX Runtime versions and CPUs, so measure on the setup you deploy: on
+ONNX Runtime 1.23.2 int8_int4_embeddings agreed on 110 and mixed on 113, from 1.24 on 119 and 118.
 """
 from __future__ import annotations
 

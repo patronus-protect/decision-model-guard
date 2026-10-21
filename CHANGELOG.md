@@ -74,6 +74,10 @@ come out differently. Read "Changed" before upgrading.
   and the exit codes.
 - `evaluate_extraction(cautious=...)`, `ExtractionReport.skipped`, `evaluate.check_case`, `ExtractionGuard` accepts
   plain functions, `scripts/onnx_agreement.py`.
+- `WolfDefenderJev.from_pretrained(onnx=...)` warns when it loads an INT8 variant (`mixed`, `int8_int4_embeddings`)
+  on ONNX Runtime before 1.24. Those versions agree with fp32 on 110 to 113 of the 120 bundled decisions, 1.24 and
+  later on 118 to 119. ONNX Runtime 1.24 has no wheels for Python 3.10, Intel Macs or macOS 13, so the `onnx` extra
+  keeps `onnxruntime>=1.20`; use `fp16` on those setups.
 
 ### Documentation
 

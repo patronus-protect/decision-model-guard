@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import warnings
 from collections.abc import Sequence
 
 from ..util import pick_device, require
@@ -154,9 +155,14 @@ class WolfDefenderJevONNX:
     @classmethod
     def from_pretrained(cls, repo_or_path: str = REPO, variant: str = "int8_int4_embeddings", revision: str | None = None,
                         threads: int | None = None, providers=None, **kw) -> WolfDefenderJevONNX:
-        """Load a variant (int8_int4_embeddings by default, or a path to an .onnx file) with its tokenizer and config."""
-        from .._onnx import read_json, resolve, session, tokenizer
+        """Load a variant (int8_int4_embeddings by default, or a path to an .onnx file) with its tokenizer and config.
+        Warns when an INT8 variant runs on ONNX Runtime before 1.24 (the last versions for Python 3.10 and Intel Macs)."""
+        from .._onnx import INT8_VARIANTS, read_json, resolve, runtime_version, session, tokenizer
         folder, graph = resolve(repo_or_path, variant, files=("config.json", "tokenizer.json", "tokenizer_config.json"), revision=revision)
+        if variant in INT8_VARIANTS and runtime_version() < (1, 24):
+            warnings.warn(f"Wolf Defender Jev {variant} on ONNX Runtime {'.'.join(map(str, runtime_version()))}: before 1.24 the INT8 "
+                          "kernels give the fp32 answer on 110 to 113 of 120 bundled decisions, from 1.24 on 118 to 119; "
+                          "use onnx='fp16' or onnxruntime>=1.24 (Python 3.11+)", RuntimeWarning, stacklevel=2)
         cfg, tcfg = read_json(folder / "config.json"), read_json(folder / "tokenizer_config.json")
         tok = tokenizer(folder)
 

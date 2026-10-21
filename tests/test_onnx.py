@@ -1,5 +1,6 @@
 """ONNX Runtime backend, offline: tiny graphs and a word-level tokenizer in the repository layout of the Patronus models."""
 import json
+import warnings
 
 import numpy as np
 import pytest
@@ -163,6 +164,17 @@ def test_wolf_defender_jev_onnx_adapter(jev_repo):
     assert np.allclose(p, single)                                       # token-budget batching changes nothing
     with pytest.raises(ValueError):
         m.decide_batch(scenes, "q", ["only one"])
+
+
+def test_int8_jev_warns_on_old_onnx_runtime(jev_repo, monkeypatch):
+    import onnxruntime
+    monkeypatch.setattr(onnxruntime, "__version__", "1.23.2")
+    with pytest.warns(RuntimeWarning, match="fp16"):
+        WolfDefenderJev.from_pretrained(str(jev_repo), onnx="int8_int4_embeddings")
+    monkeypatch.setattr(onnxruntime, "__version__", "1.24.0")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        WolfDefenderJev.from_pretrained(str(jev_repo), onnx="int8_int4_embeddings")
 
 
 def test_pipeline_and_config_with_onnx(detector_repo, jev_repo):
