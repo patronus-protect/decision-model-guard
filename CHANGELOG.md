@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (2026-10-20)
+## 0.2.0 (2026-10-21)
 
 This release fixes guard bypasses found in a QA round on 0.1.2 and changes how scenes are parsed, so some decisions
 come out differently. Read "Changed" before upgrading.

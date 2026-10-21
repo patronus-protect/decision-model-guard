@@ -9,7 +9,7 @@ repository-code: "https://github.com/patronus-protect/decision-model-guard"
 url: "https://github.com/patronus-protect/decision-model-guard"
 license: MIT
 version: 0.2.0
-date-released: 2026-10-20
+date-released: 2026-10-21
 abstract: >-
   Decision Model Guard protects decision models (Jev-like models, classifiers and LLM judges) from text inside the
   content that steers their answer. It scans untrusted content, runs an erase-and-check steering gate around any
