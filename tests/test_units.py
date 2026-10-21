@@ -112,13 +112,14 @@ def test_default_takes_extra_scanners_and_decide_many_takes_kind(monkeypatch):
 def test_public_api_has_docstrings():
     import importlib
     import inspect
+    import typing
     missing = []
     for mn in ("decision_model_guard", "decision_model_guard.models", "decision_model_guard.input_scanners", "decision_model_guard.guards"):
         m = importlib.import_module(mn)
         for name in m.__all__:
             obj = getattr(m, name)
-            if not (inspect.isclass(obj) or inspect.isfunction(obj)):     # constants and type aliases
-                continue
+            if typing.get_origin(obj) is not None or not (inspect.isclass(obj) or inspect.isfunction(obj)):
+                continue                                                # constants and type aliases (classes to 3.10's isclass)
             members = [(n, getattr(obj, n)) for n in vars(obj) if not n.startswith("_")] if inspect.isclass(obj) else []
             for n, f in [(name, obj)] + [(f"{name}.{n}", f) for n, f in members if inspect.isfunction(f) or inspect.ismethod(f)]:
                 if callable(f) and not inspect.getdoc(f):
