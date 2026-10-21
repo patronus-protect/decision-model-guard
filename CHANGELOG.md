@@ -73,7 +73,7 @@ come out differently. Read "Changed" before upgrading.
 - CLI: `--version`, `--debug`, `scan --scene`, `decide --exit-code`, `eval/audit --audit-log`, help texts with defaults
   and the exit codes.
 - `evaluate_extraction(cautious=...)`, `ExtractionReport.skipped`, `evaluate.check_case`, `ExtractionGuard` accepts
-  plain functions, `scripts/onnx_agreement.py`.
+  plain functions, `scripts/onnx_agreement.py`, `scripts/benchmark.py`.
 - `WolfDefenderJev.from_pretrained(onnx=...)` warns when it loads an INT8 variant (`mixed`, `int8_int4_embeddings`)
   on ONNX Runtime before 1.24. Those versions agree with fp32 on 110 to 113 of the 120 bundled decisions, 1.24 and
   later on 118 to 119. ONNX Runtime 1.24 has no wheels for Python 3.10, Intel Macs or macOS 13, so the `onnx` extra
@@ -82,7 +82,7 @@ come out differently. Read "Changed" before upgrading.
 ### Documentation
 
 - README links point to their files, installs are ONNX-first (`init-config` too), the audit table was measured again
-  with this release, and the README covers the cases file, exit codes, long-scene cost and LangChain. The docs describe
+  with this release (the Performance table too), and the README covers the cases file, exit codes, long-scene cost and LangChain. The docs describe
   the trust rules that now ship, the server settings, the extraction fields and parameters, and ONNX agreement on the
   bundled cases.
 

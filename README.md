@@ -116,7 +116,7 @@ dmguard audit --config examples/audit_qwen.yml --markdown audit.md
 
 ## Extraction models
 
-Extraction models such as Cloudflare's [Clairic](https://blog.cloudflare.com/clairic-extraction-model/) return typed values (amounts, dates, estimates with intervals) that feed the next decision. A planted sentence moves them too. Measured on Clairic with twelve scenarios and 96 planted amounts (5 % and 500 % of the value the text supports):
+Extraction models such as Cloudflare's [Clairic](https://blog.cloudflare.com/clairic-extraction-model/) return typed values (amounts, dates, estimates with intervals) that feed the next decision. A planted sentence moves them too. Measured on Clairic with 0.1.2, twelve scenarios and 96 planted amounts (5 % and 500 % of the value the text supports):
 
 | | Clairic alone | With `ExtractionGuard` |
 |---|---:|---:|
@@ -366,13 +366,13 @@ print(report.to_markdown())
 
 ## Performance
 
-Apple M4 CPU, Wolf Defender Jev, `DecisionGuard.default`, median of 15 runs:
+Apple M4 CPU, Wolf Defender Jev, `DecisionGuard.default`, median of 15 runs with 0.2.0, each run a new decision ([scripts/benchmark.py](https://github.com/patronus-protect/decision-model-guard/blob/main/scripts/benchmark.py)):
 
 | Case | PyTorch | ONNX (`int8_int4_embeddings`) | Model calls |
 |---|---:|---:|---:|
-| security verdict, short email, full check | 122 ms | 113 ms | 6 |
-| routing ticket, nothing flagged | 55 ms | 32 ms | 1 |
-| routing ticket with a planted claim | 97 ms | 78 ms | 3 |
+| security verdict, short email, full check | 110 ms | 103 ms | 6 |
+| routing ticket, nothing flagged | 35 ms | 33 ms | 1 |
+| routing ticket with a planted claim | 86 ms | 72 ms | 3 |
 
 On PyTorch the claim detector alone takes about 18 ms for one piece of text and 84 ms for a five-sentence ticket (9 pieces in one batch). Long scenes (thousands of tokens) run slower on ONNX Runtime than on PyTorch on this CPU; measure on your hardware.
 

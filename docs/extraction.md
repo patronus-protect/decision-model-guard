@@ -9,7 +9,8 @@ intervals; LLM extractors return JSON. Their values feed decisions, and text ins
 Twelve scenarios (insurance claims, invoices, refunds, expenses, a freelancer invoice, a rent deposit, a loan, a flight
 delay, a used car, a water damage, an electricity bill, a goodwill credit; two in German), each with a target field
 (an estimate or a computed amount) and a control field (a fact stated in the text). Four claim templates plant a value
-of 5 % and of 500 % of the reference, 96 attacks in total. Clairic preview on Workers AI, 2026-10-20:
+of 5 % and of 500 % of the reference, 96 attacks in total. Clairic preview on Workers AI, 2026-10-20, with
+decision-model-guard 0.1.2 (not measured again with 0.2.0):
 
 | | Clairic alone | With ExtractionGuard |
 |---|---:|---:|
