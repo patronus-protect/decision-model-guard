@@ -8,6 +8,7 @@
 <p align="center">
   <a href="https://pypi.org/project/decision-model-guard/"><img alt="PyPI" src="https://img.shields.io/pypi/v/decision-model-guard?color=2a78d6"></a>
   <a href="https://github.com/patronus-protect/decision-model-guard/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/patronus-protect/decision-model-guard/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://pepy.tech/projects/decision-model-guard"><img src="https://static.pepy.tech/personalized-badge/decision-model-guard?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=BLUE&left_text=downloads" alt="PyPI Downloads"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-2a78d6">
   <a href="https://github.com/patronus-protect/decision-model-guard/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2a78d6"></a>
   <img alt="Runs on ONNX Runtime without torch" src="https://img.shields.io/badge/ONNX%20Runtime-no%20torch%20needed-2a78d6">
