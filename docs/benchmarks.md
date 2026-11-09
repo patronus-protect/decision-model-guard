@@ -43,7 +43,8 @@ The claim detector on Hugging Face is v2 (16 layers, 128k vocabulary, 80.0M para
 | IFlippedJev: 1,000 claims that flipped a local decision model on a real case | 46.8 -> 96.6 % | | |
 | NotClaim: 1,343 claims and 1,343 benign texts with the same claim vocabulary | 77.7 -> 98.1 % | 11.0 -> 2.2 % | 0.928 -> 0.998 |
 
-The weakest group is Turkish IFlippedJev claims (84 %). Per-language numbers, the set descriptions and the variants are on
+The three sets are public: [patronus-studio/decision-steering-benchmarks](https://huggingface.co/datasets/patronus-studio/decision-steering-benchmarks);
+IFlippedJev includes the cases, so the claims can be replayed against your own decision model. The weakest group is Turkish IFlippedJev claims (84 %). Per-language numbers, the set descriptions and the variants are on
 the [model card](https://huggingface.co/patronus-studio/decision-steering-gate#claim-detector).
 
 CPU latency per piece of text (Apple M4, 4 threads, ONNX Runtime 1.31, tokenization included, median over 1,500 real
