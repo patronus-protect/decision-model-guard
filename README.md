@@ -72,7 +72,7 @@ Chat guardrails check prompts and answers. Decision models fail in other places:
 - **Policy and audit log**: every decision ends as `allow`, `cautious`, `fallback`, `escalate`, `abstain` or `block`, with reasons; the JSONL log stores hashes (optionally keyed), not customer text, and `meta` as you pass it.
 - **Robustness audit**: `dmguard audit` attacks your model with ten checks and reports attack success with and without the guard; `--max-attack-success` fails CI.
 - **Extraction models**: `ExtractionGuard` protects models that return typed values (Cloudflare's Clairic, LLM extractors) from planted numbers; `Clef` and `Clairic` adapters for Cloudflare Workers AI.
-- **Runs anywhere**: ONNX Runtime without torch (96 MB claim detector, 118 MB Wolf Defender Jev), PyTorch, HTTP endpoints, OpenAI-compatible LLM judges, local LLMs; YAML config, CLI, FastAPI server with Prometheus metrics, LangChain integration.
+- **Runs anywhere**: ONNX Runtime without torch (58 MB claim detector, 118 MB Wolf Defender Jev), PyTorch, HTTP endpoints, OpenAI-compatible LLM judges, local LLMs; YAML config, CLI, FastAPI server with Prometheus metrics, LangChain integration.
 
 ## What it does
 
@@ -200,7 +200,7 @@ from decision_model_guard import DecisionGuard
 from decision_model_guard.models import WolfDefenderJev
 
 model = WolfDefenderJev.from_pretrained(onnx="int8_int4_embeddings")   # 118 MB instead of 604 MB
-guard = DecisionGuard.default(model, onnx="int8_int4_embeddings")      # claim detector: 96 MB instead of 563 MB
+guard = DecisionGuard.default(model, onnx="int8_int4_embeddings")      # claim detector: 58 MB instead of 320 MB
 ```
 
 ### Built-in model adapters
@@ -221,12 +221,12 @@ Wolf Defender Jev, the claim detector and the Wolf Defender injection models shi
 
 | `onnx=` | Claim detector | Wolf Defender Jev | Same answer as PyTorch (detector / Jev) |
 |---|---:|---:|---:|
-| `"fp32"` | 563 MB | 616 MB | 100 % / 100 % |
-| `"fp16"` | 282 MB | 309 MB | 100 % / 100 % |
-| `"mixed"` (INT8, FP16 embeddings) | 240 MB | 262 MB | 99.87 % / 99.2 % |
-| `"int8_int4_embeddings"` | 96 MB | 118 MB | 99.84 % / 99.3 % |
+| `"fp32"` | 320 MB | 616 MB | 100 % / 100 % |
+| `"fp16"` | 160 MB | 309 MB | 100 % / 100 % |
+| `"mixed"` (INT8, FP16 embeddings) | 130 MB | 262 MB | 99.86 % / 99.2 % |
+| `"int8_int4_embeddings"` | 58 MB | 118 MB | 99.83 % / 99.3 % |
 
-Agreement measured on 10,963 held-out pieces of text (detector) and 900 held-out stress decisions (Jev); the model cards on Hugging Face have the details. On 120 decisions built from the twelve bundled sample cases (originals, planted claims, neutral sentences, markdown and JSON), `fp16` picked the same option as `fp32` on all 120, `int8_int4_embeddings` on 119 with ONNX Runtime 1.24 to 1.26 and on 120 with 1.31, `mixed` on 118 and 117; every difference was a three-option decision. ONNX Runtime 1.23, the last version for Python 3.10, Intel Macs and macOS 13, is clearly worse: 110 for `int8_int4_embeddings` and 113 for `mixed`, two of them risky decisions. `WolfDefenderJev.from_pretrained` warns when it loads an INT8 variant there; use `fp16` on such setups. The INT8 kernels differ between ONNX Runtime versions and CPUs, so measure on your setup ([scripts/onnx_agreement.py](https://github.com/patronus-protect/decision-model-guard/blob/main/scripts/onnx_agreement.py)). `int8_int4_embeddings` is the smallest variant and the one the examples use; take `fp16` (309 MB) when the answers must match the PyTorch weights. A path to your own `.onnx` file works too. With `DecisionGuard.default` on the smallest variants the first decision is ready after 4.4 s instead of 13.9 s, the process peaks at 0.96 GB instead of 2.84 GB, and torch is never imported.
+Agreement measured on 13,155 validation pieces of text (detector) and 900 held-out stress decisions (Jev); the model cards on Hugging Face have the details. On 120 decisions built from the twelve bundled sample cases (originals, planted claims, neutral sentences, markdown and JSON), `fp16` picked the same option as `fp32` on all 120, `int8_int4_embeddings` on 119 with ONNX Runtime 1.24 to 1.26 and on 120 with 1.31, `mixed` on 118 and 117; every difference was a three-option decision. ONNX Runtime 1.23, the last version for Python 3.10, Intel Macs and macOS 13, is clearly worse: 110 for `int8_int4_embeddings` and 113 for `mixed`, two of them risky decisions. `WolfDefenderJev.from_pretrained` warns when it loads an INT8 variant there; use `fp16` on such setups. The INT8 kernels differ between ONNX Runtime versions and CPUs, so measure on your setup ([scripts/onnx_agreement.py](https://github.com/patronus-protect/decision-model-guard/blob/main/scripts/onnx_agreement.py)). `int8_int4_embeddings` is the smallest variant and the one the examples use; take `fp16` (309 MB) when the answers must match the PyTorch weights. A path to your own `.onnx` file works too. With `DecisionGuard.default` on the smallest variants the first decision is ready after 4.4 s instead of 13.9 s, the process peaks at 0.96 GB instead of 2.84 GB, and torch is never imported.
 
 ## Decision types
 

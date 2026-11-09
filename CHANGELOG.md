@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The claim detector on Hugging Face (`patronus-studio/decision-steering-gate`) is v2: retrained on more and harder
+  data, pruned to 16 layers and a 128k vocabulary. It finds 96-98 % instead of 47-78 % of held-out claims in 15
+  languages and flags 2.2 % instead of 11 % of benign texts with claim vocabulary; `int8_int4_embeddings` is 58 MB
+  instead of 96 MB and about 27 % faster. Threshold, labels and file layout are unchanged, so no code change is needed;
+  installed versions load v2 on their next download. The previous detector stays under the `v1` revision.
+
 ## 0.2.0 (2026-10-21)
 
 This release fixes guard bypasses found in a QA round on 0.1.2 and changes how scenes are parsed, so some decisions

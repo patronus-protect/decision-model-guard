@@ -21,6 +21,8 @@ points in 28 of 30 model-task pairs (drex phishing 97 -> 86 %, GLiNER2.5-Decide 
 
 ## Ticket routing with the claim detector
 
+Measured with the previous claim detector (v1); not re-measured with v2 yet.
+
 | Model | Attacks that succeed: no gate / full gate / detector | Harmless tickets changed: full gate / detector |
 |---|---:|---:|
 | Clef | 11.7 / 0.0 / 1.2 % | 93.0 / 3.5 % |
@@ -32,11 +34,18 @@ points in 28 of 30 model-task pairs (drex phishing 97 -> 86 %, GLiNER2.5-Decide 
 
 ## Claim detector
 
-| Set | Role | AUROC | Claims found (threshold 0.3) | Content flagged |
-|---|---|---:|---:|---:|
-| Steering benchmark A (17 claim families, 15 languages) | selection | 0.970 | 80.2 % | 0.4 % |
-| Steering benchmark B (claims of an earlier experiment) | test | 0.996 | 92.3 % | 0.3 % |
-| Decision-steering benchmark | test | 0.969 | 83.5 % | 3.4 % |
+The claim detector on Hugging Face is v2 (16 layers, 128k vocabulary, 80.0M parameters; 58 MB as
+`int8_int4_embeddings`). Threshold 0.3, PyTorch FP32, three held-out sets in 15 languages, previous (v1) -> v2:
 
-Benchmark A chose checkpoint and threshold. The training claims cover some concepts of the test sets (policy references,
-workflow status) with independently written wording; on claim styles outside the training banks expect closer to 50 or 60 %.
+| Set | Claims found | Benign texts flagged | AUROC |
+|---|---:|---:|---:|
+| Red-team holdout: 4,886 claims written by a different generator than the training data | 61.3 -> 96.5 % | | |
+| IFlippedJev: 1,000 claims that flipped a local decision model on a real case | 46.8 -> 96.6 % | | |
+| NotClaim: 1,343 claims and 1,343 benign texts with the same claim vocabulary | 77.7 -> 98.1 % | 11.0 -> 2.2 % | 0.928 -> 0.998 |
+
+The weakest group is Turkish IFlippedJev claims (84 %). Per-language numbers, the set descriptions and the variants are on
+the [model card](https://huggingface.co/patronus-studio/decision-steering-gate#claim-detector).
+
+CPU latency per piece of text (Apple M4, 4 threads, ONNX Runtime 1.31, tokenization included, median over 1,500 real
+texts): `int8_int4_embeddings` 5.7 -> 4.1 ms, `fp32` 7.3 -> 5.3 ms. The previous detector stays available under the
+`v1` revision on Hugging Face.
