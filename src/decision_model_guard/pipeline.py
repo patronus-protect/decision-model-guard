@@ -77,7 +77,7 @@ class DecisionGuard:
                 onnx: str | None = None, extra_scanners: Sequence[Scanner] = (), **kw) -> DecisionGuard:
         """Recommended setup: rule-based scanners, claim detector, full check for risky and ordered decisions, detector-led
         check for unordered ones (where the full check falls back too often). `onnx` runs the claim detector on ONNX
-        Runtime ("int8_int4_embeddings" is the 96 MB variant, also used when torch is not installed); combine it with
+        Runtime ("int8_int4_embeddings" is the 58 MB variant, also used when torch is not installed); combine it with
         WolfDefenderJev.from_pretrained(onnx=...) for a setup without torch. The detector is loaded (and downloaded) here.
         `extra_scanners` (for example PromptInjection) run after the default scanners; other keywords (guards, policy,
         audit, ...) go to DecisionGuard."""

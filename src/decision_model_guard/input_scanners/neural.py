@@ -130,7 +130,7 @@ class ClaimDetector:
 
     `redact=True` removes the flagged units from the sanitized text. The gate reuses `score()` to pick what to erase.
     onnx: run an ONNX variant on ONNX Runtime instead of PyTorch ("fp32", "fp16", "mixed", "int8_int4_embeddings" or a
-    path to an .onnx file; the smallest is 96 MB); needs the `onnx` extra, no torch. Without torch installed,
+    path to an .onnx file; the smallest is 58 MB); needs the `onnx` extra, no torch. Without torch installed,
     "int8_int4_embeddings" is used."""
 
     name = "ClaimDetector"
